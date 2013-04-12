@@ -8,7 +8,8 @@ class RcModel:
 	RCTYPE_VU = 4
 	RCTYPE_ET4X00 = 5
 	RCTYPE_XP1000 = 6
-	RCTYPE_E3HD = 7	
+	RCTYPE_E3HD = 7
+	RCTYPE_ODINM7 = 7
 
 	def __init__(self):
 		self.currentRcType = self.RCTYPE_DMM
