@@ -1,4 +1,4 @@
-from enigma import eTimer
+from enigma import eTimer, getBoxType
 from Components.config import config, ConfigSelection, ConfigSubDict, ConfigYesNo
 
 from Tools.CList import CList
@@ -102,7 +102,10 @@ class VideoHardware:
 		if self.modes.has_key("DVI-PC") and not self.getModeList("DVI-PC"):
 			print "remove DVI-PC because of not existing modes"
 			del self.modes["DVI-PC"]
-
+		if getBoxType() == 'e3hd' or getBoxType() == 'odinm7':
+			del self.modes["YPbPr"]
+		if getBoxType() == 'e3hd':
+			del self.modes["Scart"]
 		self.createConfig()
 		self.readPreferredModes()
 

@@ -8,6 +8,7 @@ class RcModel:
 	RCTYPE_VU = 4
 	RCTYPE_ET4X00 = 5
 	RCTYPE_XP1000 = 6
+	RCTYPE_E3HD = 7	
 
 	def __init__(self):
 		self.currentRcType = self.RCTYPE_DMM
@@ -45,7 +46,10 @@ class RcModel:
 					self.currentRcType = self.RCTYPE_ET4X00
 				elif rc == '14':
 					self.currentRcType = self.RCTYPE_XP1000
-
+			elif model == 'e3hd':
+					self.currentRcType = self.RCTYPE_E3HD
+			elif model == 'odinm7':
+					self.currentRcType = self.RCTYPE_ODINM7					
 		elif os.path.exists('/proc/stb/info/vumodel'):
 			self.currentRcType = self.RCTYPE_VU
 
@@ -60,6 +64,10 @@ class RcModel:
 			return '/usr/share/enigma2/rc_models/et4x00/'
 		elif self.currentRcType == self.RCTYPE_XP1000:
 			return '/usr/share/enigma2/rc_models/xp1000/'
+		elif self.currentRcType == self.RCTYPE_E3HD:
+			return '/usr/share/enigma2/rc_models/e3hd/'
+		elif self.currentRcType == self.RCTYPE_ODINM7:
+			return '/usr/share/enigma2/rc_models/odinm7/'			
 		elif self.currentRcType == self.RCTYPE_VU:
 			return '/usr/share/enigma2/rc_models/vu/'
 
