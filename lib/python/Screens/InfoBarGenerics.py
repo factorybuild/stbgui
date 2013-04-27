@@ -2286,7 +2286,10 @@ class VideoMode(Screen):
 		from Components.Converter.ServiceInfo import WIDESCREEN
 		service = self.session.nav.getCurrentService()
 		info = service and service.info()
-		return info.getInfo(iServiceInformation.sAspect) in WIDESCREEN
+		try:
+			return info.getInfo(iServiceInformation.sAspect) in WIDESCREEN
+		except:
+			pass
 
 	def quit(self):
 		self.Timer.stop()

@@ -105,6 +105,7 @@ self.selectKey("LEFT")
 self.selectKey("RIGHT")
 			</code>
 		</step>
+<!--
 		<step id="channels">
 			<condition>
 from Components.NimManager import nimmanager
@@ -118,6 +119,7 @@ self.selectKey("LEFT")
 self.selectKey("RIGHT")
 			</code>
 		</step>
+ -->
 		<step id="scanquestion">
 			<text value="Do you want to do a service scan?" />
 			<condition>
@@ -125,12 +127,12 @@ from Components.NimManager import nimmanager
 self.condition = nimmanager.somethingConnected() and not config.misc.installwizard.channellistdownloaded.value
 			</condition>
 			<list>
-				<listentry caption="No, scan later manually" step="finisheddefaultsatlists" />
+				<listentry caption="No, scan later manually" step="parentalsetup" />
 				<listentry caption="Yes, do an automatic scan now" step="scan" />
 				<listentry caption="Yes, do a manual scan now" step="manualscan" />
 			</list>
 		</step>
-		<step id="scan" nextstep="finisheddefaultsatlists">
+		<step id="scan" nextstep="parentalsetup">
 			<condition>
 from Components.NimManager import nimmanager
 self.condition = nimmanager.somethingConnected() and not config.misc.installwizard.channellistdownloaded.value
