@@ -18,6 +18,8 @@ void eRCDeviceInputDev::handleCode(long rccode)
 	struct input_event *ev = (struct input_event *)rccode;
 	if (ev->type!=EV_KEY)
 		return;
+		
+	eDebug("%x %x %x", ev->value, ev->code, ev->type);
 
 	if (ev->type!=EV_KEY)
 		return;

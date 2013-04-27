@@ -48,9 +48,16 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 				"showMovies": (self.showMovies, _("Play recorded movies...")),
 				"showRadio": (self.showRadio, _("Show the radio player...")),
 				"showTv": (self.showTv, _("Show the tv player...")),
+				"showWWW": (self.showWWW, _("Open WebBrowser...")),
+				"toogleTvRadio": (self.toogleTvRadio, _("toggels betwenn tv and radio...")),
+				"openSleepTimer": (self.openSleepTimer, _("Show the Sleep Timer...")),
+				"showMediaPlayer": (self.showMediaPlayer, _("Show the media player...")),
+				"openTimerList": (self.openTimerList, _("Show the tv player...")),
+				"openIMDB": (self.openIMDB, _("Show the tv player...")),				
 			}, prio=2)
 		
 		self.allowPiP = True
+		self.radioTV = 0		
 		
 		for x in HelpableScreen, \
 				InfoBarBase, InfoBarShowHide, \
@@ -114,6 +121,14 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 			self.rds_display.hide() # in InfoBarRdsDecoder
 			from Screens.ChannelSelection import ChannelSelectionRadio
 			self.session.openWithCallback(self.ChannelSelectionRadioClosed, ChannelSelectionRadio, self)
+			
+	def toogleTvRadio(self): 
+		if self.radioTV == 1:
+			self.radioTV = 0
+			self.showTv() 
+		else: 
+			self.radioTV = 1
+			self.showRadio()
 
 	def ChannelSelectionRadioClosed(self, *arg):
 		self.rds_display.show()  # in InfoBarRdsDecoder
@@ -130,6 +145,39 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 				self.session.nav.playService(ref)
 		else:
 			self.session.open(MoviePlayer, service, slist = self.servicelist, lastservice = ref)
+			
+	def showWWW(self):
+		try:
+			from Plugins.Extensions.opera.plugin import *
+			self.session.open(OperaBrowser)
+			no_plugin = False
+		except Exception, e:
+			self.session.open(MessageBox, _("The OperaBrowser plugin is not installed!\nPlease install it."), type = MessageBox.TYPE_INFO,timeout = 10 )
+			
+	def openSleepTimer(self):
+		from Screens.SleepTimerEdit import SleepTimerEdit
+		self.session.open(SleepTimerEdit)
+			
+	def openTimerList(self):
+		from Screens.TimerEdit import TimerEditList
+		self.session.open(TimerEditList)
+		
+	def showMediaPlayer(self):
+		try:
+			from Plugins.Extensions.MediaPlayer.plugin import MediaPlayer
+			self.session.open(MediaPlayer)
+			no_plugin = False
+		except Exception, e:
+			self.session.open(MessageBox, _("The MediaPlayer plugin is not installed!\nPlease install it."), type = MessageBox.TYPE_INFO,timeout = 10 )
+
+	def openIMDB(self):
+		try:
+			for plugin in plugins.getPlugins([PluginDescriptor.WHERE_PLUGINMENU ,PluginDescriptor.WHERE_EXTENSIONSMENU, PluginDescriptor.WHERE_EVENTINFO]):
+				if plugin.name == _("IMDb Details"):
+					self.runPlugin(plugin)
+					break
+		except Exception, e:
+			self.session.open(MessageBox, _("The IMDb plugin is not installed!\nPlease install it."), type = MessageBox.TYPE_INFO,timeout = 10 )			
 
 class MoviePlayer(InfoBarBase, InfoBarShowHide, \
 		InfoBarMenu, \

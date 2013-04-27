@@ -516,6 +516,7 @@ class InfoBarChannelSelection:
 				"historyBack": (self.historyBack, _("Switch to previous channel in history")),
 				"historyNext": (self.historyNext, _("Switch to next channel in history")),
 				"openServiceList": (self.openServiceList, _("Open service list")),
+				"openSatellites": (self.openSatellites, _("Open satellites list")),
 			})
 
 	def showTvChannelList(self, zap=False):
@@ -584,6 +585,13 @@ class InfoBarChannelSelection:
 		else:
 			self.servicelist.moveDown()
 		self.servicelist.zap(enable_pipzap = True)
+		
+	def openSatellites(self):
+		if self.save_current_timeshift and self.timeshiftEnabled():
+			InfoBarTimeshift.saveTimeshiftActions(self, postaction="openSatellites")
+		else:
+			self.servicelist.showSatellites()
+			self.session.execDialog(self.servicelist)
 
 class InfoBarMenu:
 	""" Handles a menu action, to open the (main) menu """

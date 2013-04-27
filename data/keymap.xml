@@ -115,6 +115,7 @@
 		<key id="KEY_CHANNELDOWN" mapto="openServiceList" flags="m" />
 		<key id="BTN_0" mapto="zapUp" flags="mr" />
 		<key id="BTN_1" mapto="zapDown" flags="mr" />
+		<key id="KEY_SAT" mapto="openSatellites" flags="m" />		
 	</map>
 	
 	<map context="MinuteInputActions">
@@ -189,10 +190,15 @@
 
 	<map context="InfobarActions">
 		<key id="KEY_VIDEO" mapto="showMovies" flags="m" />
-		<key id="KEY_RADIO" mapto="showRadio" flags="m" />
-		<key id="KEY_TV" mapto="showTv" flags="m" />
+		<key id="KEY_RADIO" mapto="toogleTvRadio" flags="m" />
+		<key id="KEY_TV" mapto="toogleTvRadio" flags="m" />
 		<key id="KEY_FILE" mapto="showMovies" flags="m" />
 		<key id="KEY_TEXT" mapto="showText" flags="m" />
+		<key id="KEY_WWW" mapto="showWWW" flags="m" />
+		<key id="KEY_SEARCH" mapto="openIMDB" flags="l" />
+		<key id="KEY_SLEEP" mapto="openSleepTimer" flags="b" />
+		<key id="KEY_MEDIA" mapto="showMediaPlayer" flags="m" />
+		<key id="KEY_PROGRAM" mapto="openTimerList" flags="b" />		
 	</map>
 
 	<map context="InfobarAudioSelectionActions">
