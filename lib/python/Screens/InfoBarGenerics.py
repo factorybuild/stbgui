@@ -587,11 +587,8 @@ class InfoBarChannelSelection:
 		self.servicelist.zap(enable_pipzap = True)
 		
 	def openSatellites(self):
-		if self.save_current_timeshift and self.timeshiftEnabled():
-			InfoBarTimeshift.saveTimeshiftActions(self, postaction="openSatellites")
-		else:
-			self.servicelist.showSatellites()
-			self.session.execDialog(self.servicelist)
+		self.servicelist.showSatellites()
+		self.session.execDialog(self.servicelist)
 
 class InfoBarMenu:
 	""" Handles a menu action, to open the (main) menu """

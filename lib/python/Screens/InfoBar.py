@@ -53,7 +53,12 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 				"openSleepTimer": (self.openSleepTimer, _("Show the Sleep Timer...")),
 				"showMediaPlayer": (self.showMediaPlayer, _("Show the media player...")),
 				"openTimerList": (self.openTimerList, _("Show the tv player...")),
-				"openIMDB": (self.openIMDB, _("Show the tv player...")),				
+				"openIMDB": (self.openIMDB, _("Show the tv player...")),
+				"openBouquetList": (self.openBouquetList, _("open bouquetlist")),
+				"showSetup": (self.showSetup, _("Show setup...")),
+				'HarddiskSetup': (self.HarddiskSetup, _('Select HDD')),
+				"showPluginBrowser": (self.showPluginBrowser, _("Show the plugins...")),
+				"showWWW": (self.showPORTAL, _("Open MediaPortal...")),				
 			}, prio=2)
 		
 		self.allowPiP = True
@@ -177,7 +182,45 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 					self.runPlugin(plugin)
 					break
 		except Exception, e:
-			self.session.open(MessageBox, _("The IMDb plugin is not installed!\nPlease install it."), type = MessageBox.TYPE_INFO,timeout = 10 )			
+			self.session.open(MessageBox, _("The IMDb plugin is not installed!\nPlease install it."), type = MessageBox.TYPE_INFO,timeout = 10 )
+
+	def openBouquetList(self):
+		if config.usage.tvradiobutton_mode.getValue() == "MovieList":
+			self.showTvChannelList(True)
+			self.showMovies()
+		elif config.usage.tvradiobutton_mode.getValue() == "ChannelList":
+			self.showTvChannelList(True)
+		elif config.usage.tvradiobutton_mode.getValue() == "BouquetList":
+			self.showTvChannelList(True)
+			self.servicelist.showFavourites()
+
+	def showSetup(self):
+		from Screens.Menu import MainMenu, mdom
+		root = mdom.getroot()
+		for x in root.findall("menu"):
+			y = x.find("id")
+			if y is not None:
+				id = y.get("val")
+				if id and id == "setup":
+					self.session.infobar = self
+					self.session.open(MainMenu, x)
+					return
+
+	def HarddiskSetup(self):
+		from Screens.HarddiskSetup import HarddiskSelection
+		self.session.open(HarddiskSelection)
+
+	def showPluginBrowser(self):
+		from Screens.PluginBrowser import PluginBrowser
+		self.session.open(PluginBrowser)
+
+	def showPORTAL(self):
+		try:
+			from Plugins.Extensions.mediaportal.plugin import haupt_Screen
+			self.session.open(haupt_Screen)
+			no_plugin = False
+		except Exception, e:
+			self.session.open(MessageBox, _("The MediaPortal plugin is not installed!\nPlease install it."), type = MessageBox.TYPE_INFO,timeout = 10 )
 
 class MoviePlayer(InfoBarBase, InfoBarShowHide, \
 		InfoBarMenu, \
