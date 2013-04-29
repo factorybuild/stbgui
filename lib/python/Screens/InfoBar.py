@@ -185,14 +185,8 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 			self.session.open(MessageBox, _("The IMDb plugin is not installed!\nPlease install it."), type = MessageBox.TYPE_INFO,timeout = 10 )
 
 	def openBouquetList(self):
-		if config.usage.tvradiobutton_mode.getValue() == "MovieList":
-			self.showTvChannelList(True)
-			self.showMovies()
-		elif config.usage.tvradiobutton_mode.getValue() == "ChannelList":
-			self.showTvChannelList(True)
-		elif config.usage.tvradiobutton_mode.getValue() == "BouquetList":
-			self.showTvChannelList(True)
-			self.servicelist.showFavourites()
+		self.showTvChannelList(True)
+		self.servicelist.showFavourites()
 
 	def showSetup(self):
 		from Screens.Menu import MainMenu, mdom
