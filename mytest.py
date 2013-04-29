@@ -491,6 +491,12 @@ def runScreenTest():
 
 	profile("RunReactor")
 	profile_final()
+	
+	if enigma.getBoxType() == 'odinm7':
+		f = open("/dev/dbox/oled0", "w")
+		f.write('-E2-')
+		f.close()		
+	
 	runReactor()
 
 	config.misc.startCounter.save()
