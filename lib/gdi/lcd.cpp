@@ -66,7 +66,7 @@ eDBoxLCD::eDBoxLCD()
 	flipped = false;
 	inverted = 0;
 	is_oled = 0;
-#ifndef NO_LCD
+/*#ifndef NO_LCD*/
 	lcdfd = open("/dev/dbox/oled0", O_RDWR);
 	if (lcdfd < 0)
 	{
@@ -118,7 +118,7 @@ eDBoxLCD::eDBoxLCD()
 			is_oled = 3;
 		}
 	}
-#endif
+/*#endif*/
 	instance=this;
 
 	setSize(xres, yres, bpp);
