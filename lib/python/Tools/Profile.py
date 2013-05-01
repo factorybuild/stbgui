@@ -33,7 +33,6 @@ def profile(id):
 	now = time.time() - profile_start
 	if profile_file:
 		profile_file.write("%7.3f\t%s\n" % (now, id))
-
 		if id in profile_data:
 			t = profile_data[id]
 			if total_time:
@@ -43,9 +42,10 @@ def profile(id):
 			try:
 				if getBoxType() == "odinm7":
 					f = open("/dev/dbox/oled0", "w")
+					f.write("%d" % perc)
 				else:
-					f = open("/proc/progress", "w")			
-				f.write("%d \n" % perc)
+					f = open("/proc/progress", "w")
+					f.write("%d \n" % perc)
 				f.close()
 			except IOError:
 				pass
