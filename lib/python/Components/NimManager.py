@@ -1405,9 +1405,9 @@ def InitNimManager(nimmgr):
 			nim.toneAmplitude.slot_id = x
 			nim.toneAmplitude.addNotifier(toneAmplitudeChanged)
 			nim.diseqc13V = ConfigYesNo(False)
-			nim.diseqcMode = ConfigSelection(diseqc_mode_choices, "diseqc_a_b")
+			nim.diseqcMode = ConfigSelection(diseqc_mode_choices, "single")
 			nim.connectedTo = ConfigSelection([(str(id), nimmgr.getNimDescription(id)) for id in nimmgr.getNimListOfType("DVB-S") if id != x])
-			nim.simpleSingleSendDiSEqC = ConfigYesNo(False)
+			nim.simpleSingleSendDiSEqC = ConfigYesNo(True)
 			nim.simpleDiSEqCSetVoltageTone = ConfigYesNo(True)
 			nim.simpleDiSEqCOnlyOnSatChange = ConfigYesNo(False)
 			nim.diseqcA = ConfigSatlist(list = diseqc_satlist_choices)
