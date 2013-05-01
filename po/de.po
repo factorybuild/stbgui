@@ -7388,3 +7388,21 @@ msgid ""
 msgstr ""
 "Bitte beachten: ohne gesetzte PIN kann der Jugendschutz ohne weiteres "
 "deaktiviert werden."
+
+msgid "Channelnumber in Standby off"
+msgstr "Programmnummer im Standby aus"
+
+msgid "Channelnumber in Standby Clock"
+msgstr "Programmnummer im Standby Uhrzeit"
+
+msgid "Clock always"
+msgstr "Immer die Uhrzeit"
+
+msgid "Always off"
+msgstr "Immer aus"
+
+msgid "Show clock in Deep Standby"
+msgstr "Zeige Uhr im Display (Deep Standby)"
+
+msgid "Time mode"
+msgstr "Uhrzeit Anzeige Modus"
