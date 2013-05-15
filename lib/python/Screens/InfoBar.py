@@ -58,11 +58,11 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 				"showSetup": (self.showSetup, _("Show setup...")),
 				'HarddiskSetup': (self.HarddiskSetup, _('Select HDD')),
 				"showPluginBrowser": (self.showPluginBrowser, _("Show the plugins...")),
-				"showPortal": (self.showPORTAL, _("Open MediaPortal...")),				
+				"showPortal": (self.showPORTAL, _("Open MediaPortal...")),
 			}, prio=2)
 		
 		self.allowPiP = True
-		self.radioTV = 0		
+		self.radioTV = 0
 		
 		for x in HelpableScreen, \
 				InfoBarBase, InfoBarShowHide, \
