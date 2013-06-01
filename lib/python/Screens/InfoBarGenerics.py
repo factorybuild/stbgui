@@ -1992,6 +1992,7 @@ class InfoBarInstantRecord:
 		simulTimerList = self.session.nav.RecordTimer.record(recording)
 
 		if simulTimerList is None:	# no conflict
+			recording.autoincrease = False
 			self.recording.append(recording)
 		else:
 			if len(simulTimerList) > 1: # with other recording
@@ -2732,7 +2733,8 @@ class InfoBarSubtitleSupport(object):
 
 		self.__event_tracker = ServiceEventTracker(screen=self, eventmap=
 			{
-				iPlayableService.evEnd: self.__serviceStopped,
+				iPlayableService.evStart: self.__serviceChanged,
+				iPlayableService.evEnd: self.__serviceChanged,
 				iPlayableService.evUpdatedInfo: self.__updatedInfo
 			})
 
@@ -2747,15 +2749,17 @@ class InfoBarSubtitleSupport(object):
 			from Screens.AudioSelection import SubtitleSelection
 			self.session.open(SubtitleSelection, self)
 
-	def __serviceStopped(self):
-		self.selected_subtitle = None
-		self.subtitle_window.hide()
+	def __serviceChanged(self):
+		if self.selected_subtitle:
+			self.selected_subtitle = None
+			self.subtitle_window.hide()
 
 	def __updatedInfo(self):
-		subtitle = self.getCurrentServiceSubtitle()
-		cachedsubtitle = subtitle.getCachedSubtitle()
-		if cachedsubtitle:
-			self.enableSubtitle(cachedsubtitle)
+		if not self.selected_subtitle:
+			subtitle = self.getCurrentServiceSubtitle()
+			cachedsubtitle = subtitle.getCachedSubtitle()
+			if cachedsubtitle:
+				self.enableSubtitle(cachedsubtitle)
 
 	def enableSubtitle(self, selectedSubtitle):
 		subtitle = self.getCurrentServiceSubtitle()
