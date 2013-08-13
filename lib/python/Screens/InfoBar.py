@@ -307,7 +307,8 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, \
 
 	def leavePlayerConfirmed(self, answer):
 		answer = answer and answer[1]
-
+		if answer is None:
+			return
 		if answer in ("quitanddelete", "quitanddeleteconfirmed"):
 			ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
 			serviceHandler = enigma.eServiceCenter.getInstance()
@@ -347,7 +348,7 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, \
 			self.doSeek(0)
 			self.setSeekState(self.SEEK_STATE_PLAY)
 		elif answer in ("playlist","playlistquit","loop"):
-			( next_service, item , lenght ) = self.nextPlaylistService(self.cur_service)
+			( next_service, item , lenght ) = self.getPlaylistServiceInfo(self.cur_service)
 			if next_service is not None:
 				if config.usage.next_movie_msg.value:
 					self.displayPlayedName(next_service, item, lenght)
@@ -360,6 +361,12 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, \
 					self.leavePlayerConfirmed([True,"loop"])
 				else:
 					self.leavePlayerConfirmed([True,"quit"])
+		elif answer in ("repeatcurrent"):
+			if config.usage.next_movie_msg.value:
+				(item, lenght) = self.getPlaylistServiceInfo(self.cur_service)
+				self.displayPlayedName(self.cur_service, item, lenght)
+			self.session.nav.stopService()
+			self.session.nav.playService(self.cur_service)
 
 	def doEofInternal(self, playing):
 		if not self.execing:
@@ -470,10 +477,12 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, \
 			if ref and not self.session.nav.getCurrentlyPlayingServiceOrGroup():
 				self.session.nav.playService(ref)
 
-	def nextPlaylistService(self, service):
+	def getPlaylistServiceInfo(self, service):
 		from MovieSelection import playlist
 		for i, item in enumerate(playlist):
 			if item == service:
+				if config.usage.on_movie_eof.value == "repeatcurrent":
+					return (i+1, len(playlist))
 				i += 1
 				if i < len(playlist):
 					return (playlist[i], i+1, len(playlist))
