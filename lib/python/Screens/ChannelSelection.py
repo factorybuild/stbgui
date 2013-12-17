@@ -533,37 +533,19 @@ class ChannelSelectionEdit:
 
 	def renameEntryCallback(self, name):
 		if name:
-			current = self.servicelist.getCurrent()
-			if (current.flags & eServiceReference.mustDescent):
-				mutableList = self.getMutableList(current)
-				mutableList.setListName(name)
+			mutableList = self.getMutableList()
+			if mutableList:
+				current = self.servicelist.getCurrent()
+				current.setName(name)
+				index = self.servicelist.getCurrentIndex()
+				mutableList.removeService(current)
+				mutableList.addService(current)
+				mutableList.moveService(current, index)
 				mutableList.flushChanges()
-			else:
-				end = self.atEnd()
-				if (current.flags & eServiceReference.isMarker):
-					self.addMarker(name)
-					mutableList = self.getMutableList()
-					mutableList.removeService(current)
-					mutableList.flushChanges()
-					self.servicelist.removeCurrent()
-				else:
-					sRef = current.toCompareString()
-					ref = eServiceReference(sRef)
-					ref.setName(name)
-					mutableList = self.getMutableList()
-					mutableList.removeService(current)
-					self.servicelist.removeCurrent()
-					if end:
-						if not mutableList.addService(ref):
-							self.servicelist.addService(ref, False)
-							self.moveDown()
-					else:
-						cur = self.servicelist.getCurrent()
-						if not mutableList.addService(ref, cur):
-							self.servicelist.addService(ref, True)
-					mutableList.flushChanges()
-				refreshServiceList()
-				self.servicelist.setCurrent(current)
+				self.servicelist.addService(current, True)
+				self.servicelist.removeCurrent()
+				if not self.servicelist.atEnd():
+					self.servicelist.moveUp()
 
 	def addMarker(self, name):
 		current = self.servicelist.getCurrent()
@@ -606,10 +588,9 @@ class ChannelSelectionEdit:
 					if mutableAlternatives.addService(cur_service.ref):
 						print "add", cur_service.ref.toString(), "to new alternatives failed"
 					mutableAlternatives.flushChanges()
-					end = self.atEnd()
 					self.servicelist.addService(new_ref.ref, True)
 					self.servicelist.removeCurrent()
-					if not end:
+					if not self.atEnd():
 						self.servicelist.moveUp()
 					if cur_service.ref.toString() == self.lastservice.value:
 						self.saveChannel(new_ref.ref)
@@ -873,7 +854,7 @@ class ChannelSelectionBase(Screen):
 		self["key_yellow"] = Button(_("Provider"))
 		self["key_blue"] = Button(_("Favourites"))
 
-		self["list"] = ServiceList()
+		self["list"] = ServiceList(self)
 		self.servicelist = self["list"]
 
 		self.numericalTextInput = NumericalTextInput()
@@ -1230,10 +1211,14 @@ class ChannelSelectionBase(Screen):
 		if self.isBasePathEqual(self.bouquet_root):
 			self.BouqetNumberActions(number)
 		else:
-			unichar = self.numericalTextInput.getKey(number)
-			charstr = unichar.encode("utf-8")
-			if len(charstr) == 1:
-				self.servicelist.moveToChar(charstr[0])
+			current_root = self.getRoot()
+			if  current_root and 'FROM BOUQUET "bouquets.' in current_root.getPath():
+				self.BouqetNumberActions(number)
+			else:
+				unichar = self.numericalTextInput.getKey(number)
+				charstr = unichar.encode("utf-8")
+				if len(charstr) == 1:
+					self.servicelist.moveToChar(charstr[0])
 
 	def BouqetNumberActions(self, number):
 		if number == 1: #Set focus on current playing service when available in current userbouquet
@@ -1280,7 +1265,7 @@ class ChannelSelectionBase(Screen):
 
 	def setCurrentSelection(self, service):
 		if service:
-			self.servicelist.setCurrent(service)
+			self.servicelist.setCurrent(service, adjust=False)
 
 	def setCurrentSelectionAlternative(self, ref):
 		if self.bouquet_mark_edit == EDIT_ALTERNATIVES and not (ref.flags & eServiceReference.isDirectory):
@@ -1570,14 +1555,15 @@ class ChannelSelection(ChannelSelectionBase, ChannelSelectionEdit, ChannelSelect
 					self.setCurrentSelection(ref)
 		elif ref is None or ref != nref:
 			Screens.InfoBar.InfoBar.instance.checkTimeshiftRunning(boundFunction(self.zapCheckTimeshiftCallback, enable_pipzap, preview_zap, nref))
-		elif self.rootChanged and not preview_zap:
-			if ref is not None and ref == nref:
-				self.saveRoot()
-				config.servicelist.lastmode.save()
-				self.setCurrentSelection(nref)
-				if self.startServiceRef is None or nref != self.startServiceRef:
-					self.addToHistory(nref)
-				self.rootChanged = False
+		elif not preview_zap:
+			self.saveRoot()
+			self.saveChannel(nref)
+			config.servicelist.lastmode.save()
+			self.setCurrentSelection(nref)
+			if self.startServiceRef is None or nref != self.startServiceRef:
+				self.addToHistory(nref)
+			self.rootChanged = False
+			self.revertMode = None
 
 	def zapCheckTimeshiftCallback(self, enable_pipzap, preview_zap, nref, answer):
 		if answer:
@@ -1766,13 +1752,16 @@ class ChannelSelection(ChannelSelectionBase, ChannelSelectionEdit, ChannelSelect
 			elif self.revertMode == MODE_RADIO:
 				self.setModeRadio()
 			self.revertMode = None
-			self.clearPath()
-			self.recallBouquetMode()
-			if self.bouquet_root:
-				self.enterPath(self.bouquet_root)
-			self.enterPath(root)
-			self.startRoot = None
-			self.saveRoot()
+			self.enterUserbouquet(root)
+
+	def enterUserbouquet(self, root):
+		self.clearPath()
+		self.recallBouquetMode()
+		if self.bouquet_root:
+			self.enterPath(self.bouquet_root)
+		self.enterPath(root)
+		self.startRoot = None
+		self.saveRoot()
 
 	def correctChannelNumber(self):
 		current_ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
@@ -1789,15 +1778,17 @@ class ChannelSelection(ChannelSelectionBase, ChannelSelectionEdit, ChannelSelect
 				self.setCurrentSelection(current_ref)
 		selected_ref = self.getCurrentSelection()
 		if selected_ref and current_ref and selected_ref.getChannelNum() != current_ref.getChannelNum():
-			self.session.nav.currentlyPlayingServiceOrGroup = selected_ref
-			from Components.Renderer.ChannelNumber import doRenumber
-			doRenumber()
+			oldref = self.session.nav.currentlyPlayingServiceReference
+			if oldref and selected_ref == oldref or (oldref != current_ref and selected_ref == current_ref):
+				self.session.nav.currentlyPlayingServiceOrGroup = selected_ref
+				from Components.Renderer.ChannelNumber import doRenumber
+				doRenumber()
 		if self.dopipzap:
 			if tmp_mode == "tv":
 				self.setModeTv()
 			elif tmp_mode == "radio":
 				self.setModeRadio()
-			self.setRoot(tmp_root)
+			self.enterUserbouquet(tmp_root)
 			pip_ref = self.session.pip.getCurrentService()
 			if tmp_ref and pip_ref and tmp_ref.getChannelNum() != pip_ref.getChannelNum():
 				self.session.pip.currentService = tmp_ref

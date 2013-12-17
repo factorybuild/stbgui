@@ -1928,7 +1928,6 @@ class InfoBarPiP:
 			currentServicePath = self.servicelist.getCurrentServicePath()
 			self.servicelist.setCurrentServicePath(self.session.pip.servicePath)	
 			self.session.pip.playService(swapservice)
-			self.session.nav.stopService() # stop portal
 			self.session.nav.playService(pipref) # start subservice
 			self.session.pip.servicePath = currentServicePath
 			if self.servicelist.dopipzap:
@@ -2761,7 +2760,7 @@ class InfoBarTeletextPlugin:
 			print "no teletext plugin found!"
 
 	def startTeletext(self):
-		self.teletext_plugin(session=self.session, infobar=self, service=self.session.nav.getCurrentService())
+		self.teletext_plugin(session=self.session, service=self.session.nav.getCurrentService())
 
 class InfoBarSubtitleSupport(object):
 	def __init__(self):
@@ -2869,7 +2868,8 @@ class InfoBarServiceErrorPopupSupport:
 
 			if error:
 				self.closeNotificationInstantiateDialog()
-				Notifications.AddPopup(text = error, type = MessageBox.TYPE_ERROR, timeout = 5, id = "ZapError")
+				if hasattr(self, "dishDialog") and not self.dishDialog.dishState():
+					Notifications.AddPopup(text = error, type = MessageBox.TYPE_ERROR, timeout = 5, id = "ZapError")
 
 class InfoBarPowersaver:
 	def __init__(self):
