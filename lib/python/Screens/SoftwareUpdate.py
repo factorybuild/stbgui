@@ -8,7 +8,8 @@ from Components.Ipkg import IpkgComponent
 from Components.Sources.StaticText import StaticText
 from Components.Slider import Slider
 from Tools.BoundFunction import boundFunction
-from enigma import eTimer, getBoxType, eDVBDB
+from enigma import eTimer, eDVBDB
+from boxbranding import getBoxType
 
 class UpdatePlugin(Screen):
 	skin = """

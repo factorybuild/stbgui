@@ -1,5 +1,6 @@
-from enigma import eTimer, getBoxType
+from enigma import eTimer
 from Components.config import config, ConfigSelection, ConfigSubDict, ConfigYesNo
+from boxbranding import getBoxType
 
 from Tools.CList import CList
 from Tools.HardwareInfo import HardwareInfo

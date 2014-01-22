@@ -324,40 +324,6 @@ const char *getEnigmaVersionString()
 	return std::string(date).c_str();
 }
 
-const char *getDistro()
-{
-	return DISTRO;
-}
-
-const char *getMachineBrand()
-{
-	return MACHINE_BRAND;
-}
-
-const char *getMachineName()
-{
-	return MACHINE_NAME;
-}
-
-const char *getImageVersionString()
-{
-	return IMAGEVERSION;
-}
-
-const char *getBuildVersionString()
-{
-	return IMAGEBUILD;
-}
-
-const char *getDriverDateString()
-{
-	return DRIVERDATE;
-}
-
-const char *getBoxType()
-{
-	return BOXTYPE;
-}
 
 #include <malloc.h>
 

@@ -9,6 +9,7 @@ import Tools.RedirectOutput
 import enigma
 import eConsoleImpl
 import eBaseImpl
+from boxbranding import getboxtype
 enigma.eTimer = eBaseImpl.eTimer
 enigma.eSocketNotifier = eBaseImpl.eSocketNotifier
 enigma.eConsoleAppContainer = eConsoleImpl.eConsoleAppContainer
@@ -491,7 +492,7 @@ def runScreenTest():
 	profile("RunReactor")
 	profile_final()
 	
-	if enigma.getBoxType() == 'odinm7':
+	if getBoxType() == 'odinm7':
 		f = open("/dev/dbox/oled0", "w")
 		f.write('-E2-')
 		f.close()		
