@@ -9,7 +9,7 @@ import Tools.RedirectOutput
 import enigma
 import eConsoleImpl
 import eBaseImpl
-from boxbranding import getboxtype
+from boxbranding import getBoxType
 enigma.eTimer = eBaseImpl.eTimer
 enigma.eSocketNotifier = eBaseImpl.eSocketNotifier
 enigma.eConsoleAppContainer = eConsoleImpl.eConsoleAppContainer
