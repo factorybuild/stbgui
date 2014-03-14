@@ -1,5 +1,5 @@
 from Components.Harddisk import harddiskmanager
-from config import ConfigSubsection, ConfigYesNo, config, ConfigSelection, ConfigText, ConfigNumber, ConfigSet, ConfigLocations, ConfigSelectionNumber, ConfigClock
+from config import ConfigSubsection, ConfigYesNo, config, ConfigSelection, ConfigText, ConfigNumber, ConfigSet, ConfigLocations, ConfigSelectionNumber, ConfigClock, ConfigSlider
 from Tools.Directories import resolveFilename, SCOPE_HDD, defaultRecordingLocation
 from enigma import setTunerTypePriorityOrder, setPreferredTuner, setSpinnerOnOff, setEnableTtCachingOnOff;
 from enigma import Misc_Options, eEnv;
@@ -94,6 +94,8 @@ def InitUsageConfig():
 		("intermediate", _("Intermediate")),
 		("expert", _("Expert")) ])
 
+	config.usage.startup_to_standby = ConfigYesNo(default = False)
+
 	config.usage.on_long_powerpress = ConfigSelection(default = "show_menu", choices = [
 		("show_menu", _("Show shutdown menu")),
 		("shutdown", _("Immediate shutdown")),
@@ -171,7 +173,9 @@ def InitUsageConfig():
 	nims = [("-1", _("auto"))]
 	for x in nimmanager.nim_slots:
 		nims.append((str(x.slot), x.getSlotName()))
-	config.usage.frontend_priority = ConfigSelection(default = "-1", choices = nims)
+	config.usage.frontend_priority = ConfigSelection(default = "-1", choices = list(nims))
+	nims.insert(0,("-2", _("Disabled")))
+	config.usage.recording_frontend_priority = ConfigSelection(default = "-2", choices = nims)
 	config.misc.disable_background_scan = ConfigYesNo(default = False)
 
 	config.usage.show_event_progress_in_servicelist = ConfigSelection(default = 'barright', choices = [
@@ -220,6 +224,25 @@ def InitUsageConfig():
 	config.usage.show_cryptoinfo = ConfigYesNo(default = True)
 	config.usage.show_eit_nownext = ConfigYesNo(default = True)
 	config.usage.show_vcr_scart = ConfigYesNo(default = False)
+
+	if SystemInfo["Fan"]:
+		choicelist = [('off', _("Off")), ('on', _("On")), ('auto', _("Auto"))]
+		if os.path.exists("/proc/stb/fp/fan_choices"):
+			choicelist = [x for x in choicelist if x[0] in open("/proc/stb/fp/fan_choices", "r").read().strip().split(" ")]
+		config.usage.fan = ConfigSelection(choicelist)
+		def fanChanged(configElement):
+			file = open("/proc/stb/fp/fan", "w")
+			file.write(configElement.value)
+			file.close()
+		config.usage.fan.addNotifier(fanChanged)
+
+	if SystemInfo["FanPWM"]:
+		def fanSpeedChanged(configElement):
+			file = open("/proc/stb/fp/fan_pwm", "w")
+			file.write(hex(configElement.value)[2:])
+			file.close()
+		config.usage.fanspeed = ConfigSlider(default=127, increment=8, limits=(0, 255))
+		config.usage.fanspeed.addNotifier(fanSpeedChanged)
 
 	config.epg = ConfigSubsection()
 	config.epg.eit = ConfigYesNo(default = True)
@@ -357,7 +380,7 @@ def InitUsageConfig():
 
 	config.subtitles.dvb_subtitles_yellow = ConfigYesNo(default = False)
 	config.subtitles.dvb_subtitles_original_position = ConfigSelection(default = "0", choices = [("0", _("Original")), ("1", _("Fixed")), ("2", _("Relative"))])
-	config.subtitles.dvb_subtitles_centered = ConfigYesNo(default = False)
+	config.subtitles.dvb_subtitles_centered = ConfigYesNo(default = True)
 	config.subtitles.subtitle_bad_timing_delay = ConfigSelection(default = "0", choices = subtitle_delay_choicelist)
 	config.subtitles.dvb_subtitles_backtrans = ConfigSelection(default = "0", choices = [
 		("0", _("No transparency")),
@@ -437,6 +460,7 @@ def InitUsageConfig():
 	config.autolanguage.audio_autoselect3 = ConfigSelection(choices=audio_language_choices, default="---")
 	config.autolanguage.audio_autoselect4 = ConfigSelection(choices=audio_language_choices, default="---")
 	config.autolanguage.audio_defaultac3 = ConfigYesNo(default = False)
+	config.autolanguage.audio_defaultddp = ConfigYesNo(default = False)
 	config.autolanguage.audio_usecache = ConfigYesNo(default = True)
 
 	subtitle_language_choices = audio_language_choices[:1] + audio_language_choices [2:]

@@ -50,6 +50,11 @@ AC_CHECK_LIB([xmlccwrap], [exit], [LIBXMLCCWRAP_LIBS="-lxmlccwrap"], [AC_MSG_ERR
 AC_SUBST(LIBXMLCCWRAP_LIBS)
 AC_LANG_POP
 
+AC_ARG_WITH(boxtype,
+	[  --with-boxtype=NAME box type [[none,dm7025,dm800...]]],
+	[BOXTYPE="$withval"],[BOXTYPE="dm800"])
+AC_SUBST(BOXTYPE)
+AC_DEFINE_UNQUOTED(BOXTYPE,"$BOXTYPE",[box type])
 
 AM_CONDITIONAL(DREAMBOX, test `echo "$BOXTYPE" | cut -b 1-2` == "dm")
 AM_CONDITIONAL(HAVE_TEMPFANCONTROL, test "$BOXTYPE" == dm8000 -o "$BOXTYPE" == dm800se -o "$BOXTYPE" == dm500hd)
@@ -178,20 +183,13 @@ data/fonts/Makefile
 data/countries/Makefile
 data/extensions/Makefile
 data/keymaps/Makefile
-data/rc_models/Makefile
-data/rc_models/et4x00/Makefile
-data/rc_models/et6x00/Makefile
-data/rc_models/et9500/Makefile
-data/rc_models/et9x00/Makefile
-data/rc_models/vu/Makefile
-data/rc_models/xp1000/Makefile
-data/rc_models/e3hd/Makefile
-data/rc_models/odinm7/Makefile
+data/hw_info/Makefile
 data/skin_default/Makefile
 data/skin_default/menu/Makefile
 data/skin_default/icons/Makefile
 data/skin_default/buttons/Makefile
 data/skin_default/spinner/Makefile
+data/skin_default/LCDIcons/Makefile
 include/Makefile
 lib/Makefile
 lib/base/eenv.cpp

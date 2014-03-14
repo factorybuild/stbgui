@@ -6,6 +6,7 @@ from Components.NimManager import nimmanager
 from Components.About import about
 from Components.ScrollLabel import ScrollLabel
 from Components.Button import Button
+from boxbranding import getMachineBrand, getMachineName
 
 from Tools.StbHardware import getFPVersion
 from enigma import eTimer
@@ -15,7 +16,7 @@ class About(Screen):
 		Screen.__init__(self, session)
 
 
-		AboutText = _("Hardware: ") + about.getHardwareTypeString() + "\n"
+		AboutText = _("Model:%s %s\n") % (getMachineBrand(), getMachineName())
 		AboutText += _("Image: ") + about.getImageTypeString() + "\n"
 		AboutText += _("Kernel version: ") + about.getKernelVersionString() + "\n"
 
