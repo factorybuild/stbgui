@@ -265,7 +265,7 @@ class PliExtraInfo(Poll, Converter, object):
 		if self.updateFEdata:
 			feinfo = service.frontendInfo()
 			if feinfo:
-				self.feraw = feinfo.getAll(False)
+				self.feraw = feinfo.getAll(config.usage.infobar_frontend_source.value == "settings")
 				if self.feraw:
 					self.fedata = ConvertToHumanReadable(self.feraw)
 
@@ -286,12 +286,12 @@ class PliExtraInfo(Poll, Converter, object):
 				+ addspace(self.createCryptoBar(info)) + self.current_source + "\n" \
 				+ addspace(self.createCryptoSpecial(info)) + addspace(self.createVideoCodec(info)) + self.createResolution(info)
 
-		if self.type == "ServiceInfo":	
+		if self.type == "ServiceInfo":
 			return addspace(self.createProviderName(info)) + addspace(self.createTunerSystem(fedata)) + addspace(self.createFrequency(feraw)) + addspace(self.createPolarization(fedata)) \
 			+ addspace(self.createSymbolRate(fedata, feraw)) + addspace(self.createFEC(fedata, feraw)) + addspace(self.createModulation(fedata)) + addspace(self.createOrbPos(feraw)) \
 			+ addspace(self.createVideoCodec(info)) + self.createResolution(info)
 
-		if self.type == "TransponderInfo":	
+		if self.type == "TransponderInfo":
 			return self.createTransponderInfo(fedata,feraw)
 
 		if self.type == "TransponderFrequency":

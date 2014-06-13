@@ -32,6 +32,7 @@ class TimerEntry(Screen, ConfigListScreen):
 		self["ok"] = Pixmap()
 		self["cancel"] = Pixmap()
 		self["key_yellow"] = Label(_("Timer type"))
+		self["key_blue"] = Label()
 
 		self.createConfig()
 
@@ -44,7 +45,8 @@ class TimerEntry(Screen, ConfigListScreen):
 			"volumeDown": self.decrementStart,
 			"size+": self.incrementEnd,
 			"size-": self.decrementEnd,
-			"yellow": self.changeTimerType
+			"yellow": self.changeTimerType,
+			"blue": self.changeZapWakeupType
 		}, -2)
 
 		self.list = []
@@ -123,7 +125,7 @@ class TimerEntry(Screen, ConfigListScreen):
 			self.timerentry_description = ConfigText(default = self.timer.description, visible_width = 50, fixed_size = False)
 			self.timerentry_tags = self.timer.tags[:]
 			self.timerentry_tagsset = ConfigSelection(choices = [not self.timerentry_tags and "None" or " ".join(self.timerentry_tags)])
-			
+
 			self.timerentry_repeated = ConfigSelection(default = repeated, choices = [("weekly", _("weekly")), ("daily", _("daily")), ("weekdays", _("Mon-Fri")), ("user", _("user defined"))])
 
 			self.timerentry_date = ConfigDateTime(default = self.timer.begin, formatstring = _("%d.%B %Y"), increment = 86400)
@@ -189,15 +191,18 @@ class TimerEntry(Screen, ConfigListScreen):
 		self.entryDate = getConfigListEntry(_("Date"), self.timerentry_date)
 		if self.timerentry_type.value == "once":
 			self.list.append(self.entryDate)
-		
+
 		self.entryStartTime = getConfigListEntry(_("Start time"), self.timerentry_starttime)
 		self.list.append(self.entryStartTime)
-		
+
 		self.entryShowEndTime = getConfigListEntry(_("Set end time"), self.timerentry_showendtime)
 		self.entryZapWakeup = getConfigListEntry(_("Wakeup receiver for start timer"), self.timerentry_zapwakeup)
 		if self.timerentry_justplay.value == "zap":
 			self.list.append(self.entryZapWakeup)
 			self.list.append(self.entryShowEndTime)
+			self["key_blue"].setText(_("Wakeup type"))
+		else:
+			self["key_blue"].setText("")
 		self.entryEndTime = getConfigListEntry(_("End time"), self.timerentry_endtime)
 		if self.timerentry_justplay.value != "zap" or self.timerentry_showendtime.value:
 			self.list.append(self.entryEndTime)
@@ -274,7 +279,7 @@ class TimerEntry(Screen, ConfigListScreen):
 			self.timerentry_service_ref = ServiceReference(args[0])
 			self.timerentry_service.setCurrentText(self.timerentry_service_ref.getServiceName())
 			self["config"].invalidate(self.channelEntry)
-			
+
 	def getTimestamp(self, date, mytime):
 		d = localtime(date)
 		dt = datetime(d.tm_year, d.tm_mon, d.tm_mday, mytime[0], mytime[1])
@@ -400,6 +405,12 @@ class TimerEntry(Screen, ConfigListScreen):
 		self.timerentry_justplay.selectNext()
 		self.timerJustplayEntry = getConfigListEntry(_("Timer type"), self.timerentry_justplay)
 		self["config"].invalidate(self.timerJustplayEntry)
+		self.createSetup("config")
+
+	def changeZapWakeupType(self):
+		if self.timerentry_justplay.value == "zap":
+			self.timerentry_zapwakeup.selectNext()
+			self["config"].invalidate(self.entryZapWakeup)
 
 	def incrementStart(self):
 		self.timerentry_starttime.increment()
@@ -483,7 +494,7 @@ class TimerLog(Screen):
 	def deleteEntry(self):
 		cur = self["loglist"].getCurrent()
 		if cur is None:
-			return 
+			return
 		self.log_entries.remove(cur[1])
 		self.fillLogList()
 		self["loglist"].l.setList(self.list)
