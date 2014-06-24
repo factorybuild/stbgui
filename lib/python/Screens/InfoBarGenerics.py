@@ -541,7 +541,7 @@ class InfoBarChannelSelection:
 				"keyChannelUp": (self.keyChannelUpCheck, self.getKeyChannelUpHelptext),
 				"keyChannelDown": (self.keyChannelDownCheck, self.getKeyChannelDownHelptext), 
 				"openServiceList": (self.openServiceList, _("Open service list")),
--				"openSatellites": (self.openSatellites, _("Open satellites list")),
+				"openSatellites": (self.openSatellites, _("Open satellites list")),
 			})
 
 	def showTvChannelList(self, zap=False):
