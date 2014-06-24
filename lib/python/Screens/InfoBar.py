@@ -283,6 +283,7 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 					(_("Yes"), "quit"),
 					(_("Yes, returning to movie list"), "movielist"),
 					(_("Yes, and delete this movie"), "quitanddelete"),
+					(_("Yes, delete this movie and return to movie list"), "deleteandmovielist"),
 					(_("No"), "continue"),
 					(_("No, but restart from begin"), "restart")
 				)
@@ -322,14 +323,23 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 		if answer:
 			self.leavePlayerConfirmed((True, "quitanddeleteconfirmed"))
 
+	def deleteAndMovielistConfirmed(self, answer):
+		if answer:
+			self.leavePlayerConfirmed((True, "deleteandmovielistconfirmed"))
+
+	def movielistAgain(self):
+		from Screens.MovieSelection import playlist
+		del playlist[:]
+		self.leavePlayerConfirmed((True, "movielist"))
+
 	def leavePlayerConfirmed(self, answer):
 		answer = answer and answer[1]
 		if answer is None:
 			return
-		if answer in ("quitanddelete", "quitanddeleteconfirmed"):
+		if answer in ("quitanddelete", "quitanddeleteconfirmed", "deleteandmovielist", "deleteandmovielistconfirmed"):
 			ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
 			serviceHandler = enigma.eServiceCenter.getInstance()
-			if answer == "quitanddelete":
+			if answer in ("quitanddelete", "deleteandmovielist"):
 				msg = ''
 				if config.usage.movielist_trashcan.value:
 					import Tools.Trashcan
@@ -337,7 +347,10 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 						trash = Tools.Trashcan.createTrashFolder(ref.getPath())
 						Screens.MovieSelection.moveServiceFiles(ref, trash)
 						# Moved to trash, okay
-						self.close()
+						if answer == "quitanddelete":
+							self.close()
+						else:
+							self.movielistAgain()
 						return
 					except Exception, e:
 						print "[InfoBar] Failed to move to .Trash folder:", e
@@ -345,22 +358,29 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 				info = serviceHandler.info(ref)
 				name = info and info.getName(ref) or _("this recording")
 				msg += _("Do you really want to delete %s?") % name
-				self.session.openWithCallback(self.deleteConfirmed, MessageBox, msg)
+				if answer == "quitanddelete":
+					self.session.openWithCallback(self.deleteConfirmed, MessageBox, msg)
+				elif answer == "deleteandmovielist":
+					self.session.openWithCallback(self.deleteAndMovielistConfirmed, MessageBox, msg)
 				return
 
-			elif answer == "quitanddeleteconfirmed":
+			elif answer in ("quitanddeleteconfirmed", "deleteandmovielistconfirmed"):
 				offline = serviceHandler.offlineOperations(ref)
 				if offline.deleteFromDisk(0):
 					self.session.openWithCallback(self.close, MessageBox, _("You cannot delete this!"), MessageBox.TYPE_ERROR)
+					if answer == "deleteandmovielistconfirmed":
+						self.movielistAgain()
 					return
 
 		if answer in ("quit", "quitanddeleteconfirmed"):
 			self.close()
-		elif answer == "movielist":
+		elif answer in ("movielist", "deleteandmovielistconfirmed"):
 			ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
 			self.returning = True
 			self.session.openWithCallback(self.movieSelected, Screens.MovieSelection.MovieSelection, ref)
 			self.session.nav.stopService()
+			if not config.movielist.stop_service.value:
+				self.session.nav.playService(self.lastservice)
 		elif answer == "restart":
 			self.doSeek(0)
 			self.setSeekState(self.SEEK_STATE_PLAY)
@@ -397,66 +417,86 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 
 	def up(self):
 		slist = self.servicelist
-		if slist and slist.dopipzap:
-			if "keep" not in config.usage.servicelist_cursor_behavior.value:
-				slist.moveUp()
-			self.session.execDialog(slist)
+		if self.servicelist and self.servicelist.dopipzap:
+			if config.usage.oldstyle_zap_controls.value:
+				self.zapDown()
+			else:
+				self.switchChannelUp()
 		else:
 			self.showMovies()
 
 	def down(self):
-		slist = self.servicelist
-		if slist and slist.dopipzap:
-			if "keep" not in config.usage.servicelist_cursor_behavior.value:
-				slist.moveDown()
-			self.session.execDialog(slist)
+		if self.servicelist and self.servicelist.dopipzap:
+			if config.usage.oldstyle_zap_controls.value:
+				self.zapUp()
+			else:
+				self.switchChannelDown()
 		else:
 			self.showMovies()
 
 	def right(self):
-		# XXX: gross hack, we do not really seek if changing channel in pip :-)
-		slist = self.servicelist
-		if slist and slist.dopipzap:
-			# XXX: We replicate InfoBarChannelSelection.zapDown here - we shouldn't do that
-			if slist.inBouquet():
-				prev = slist.getCurrentSelection()
-				if prev:
-					prev = prev.toString()
-					while True:
-						if config.usage.quickzap_bouquet_change.value and slist.atEnd():
-							slist.nextBouquet()
-						else:
-							slist.moveDown()
-						cur = slist.getCurrentSelection()
-						if not cur or (not (cur.flags & 64)) or cur.toString() == prev:
-							break
+		if self.servicelist and self.servicelist.dopipzap:
+			if config.usage.oldstyle_zap_controls.value:
+				self.switchChannelDown()
 			else:
-				slist.moveDown()
-			slist.zap(enable_pipzap = True)
+				self.zapDown()
 		else:
 			InfoBarSeek.seekFwd(self)
 
 	def left(self):
-		slist = self.servicelist
-		if slist and slist.dopipzap:
-			# XXX: We replicate InfoBarChannelSelection.zapUp here - we shouldn't do that
-			if slist.inBouquet():
-				prev = slist.getCurrentSelection()
-				if prev:
-					prev = prev.toString()
-					while True:
-						if config.usage.quickzap_bouquet_change.value:
-							if slist.atBegin():
-								slist.prevBouquet()
-						slist.moveUp()
-						cur = slist.getCurrentSelection()
-						if not cur or (not (cur.flags & 64)) or cur.toString() == prev:
-							break
+		if self.servicelist and self.servicelist.dopipzap:
+			if config.usage.oldstyle_zap_controls.value:
+				self.switchChannelUp()
 			else:
-				slist.moveUp()
-			slist.zap(enable_pipzap = True)
+				self.zapUp()
 		else:
 			InfoBarSeek.seekBack(self)
+
+	def switchChannelDown(self):
+		if "keep" not in config.usage.servicelist_cursor_behavior.value:
+			self.servicelist.moveDown()
+		self.session.execDialog(self.servicelist)
+
+	def switchChannelUp(self):
+		if "keep" not in config.usage.servicelist_cursor_behavior.value:
+			self.servicelist.moveUp()
+		self.session.execDialog(self.servicelist)
+
+	def zapUp(self):
+		slist = self.servicelist
+		if slist.inBouquet():
+			prev = slist.getCurrentSelection()
+			if prev:
+				prev = prev.toString()
+				while True:
+					if config.usage.quickzap_bouquet_change.value:
+						if slist.atBegin():
+							slist.prevBouquet()
+					slist.moveUp()
+					cur = slist.getCurrentSelection()
+					if not cur or (not (cur.flags & 64)) or cur.toString() == prev:
+						break
+		else:
+			slist.moveUp()
+		slist.zap(enable_pipzap = True)
+
+	def zapDown(self):
+		slist = self.servicelist
+		if slist.inBouquet():
+			prev = slist.getCurrentSelection()
+			if prev:
+				prev = prev.toString()
+				while True:
+					if config.usage.quickzap_bouquet_change.value and slist.atEnd():
+						slist.nextBouquet()
+					else:
+						slist.moveDown()
+					cur = slist.getCurrentSelection()
+					if not cur or (not (cur.flags & 64)) or cur.toString() == prev:
+						break
+		else:
+			slist.moveDown()
+		slist.zap(enable_pipzap = True)
 
 	def showPiP(self):
 		slist = self.servicelist
