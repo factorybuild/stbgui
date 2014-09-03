@@ -62,8 +62,8 @@ if test `echo "$BOXTYPE" | cut -b 1-2` == "dm"; then
 	AC_DEFINE(DREAMBOX, 1, [Dreambox hardware])
 	AC_DEFINE(KEY_PLAY_ACTUALLY_IS_KEY_PLAYPAUSE, 1,[define when rc sends a KEY_PLAY event for its KEY_PLAYPAUSE key])
 fi
-if test "$BOXTYPE" == "vusolo2" -o "$BOXTYPE" == "vuduo2"; then
-	AC_DEFINE(VUPLUS_RC_WORKAROUND, 1, [workaround for problem with vusolo2/vuduo2 event/rc driver])
+if test "$BOXTYPE" == "vusolo2" -o "$BOXTYPE" == "vuduo2" -o "$BOXTYPE" == "vusolose"; then
+	AC_DEFINE(VUPLUS_RC_WORKAROUND, 1, [workaround for problem with vusolo2/vuduo2/vusolose event/rc driver])
 fi
 
 AC_ARG_WITH(nolcd,
@@ -175,6 +175,7 @@ AC_SUBST(ENIGMA2_CFLAGS)
 CPPFLAGS="$CPPFLAGS $PYTHON_CPPFLAGS"
 CFLAGS="$CFLAGS $DEBUG_CFLAGS -Wall"
 CXXFLAGS="$CXXFLAGS $DEBUG_CFLAGS -Wall $BASE_CFLAGS $ENIGMA2_CFLAGS $PTHREAD_CFLAGS $OPENMP_CFLAGS"
+AX_SWIG_PYTHON_OPT="$AX_SWIG_PYTHON_OPT -DSWIG_PYTHON_LEGACY_BOOL"
 
 AC_CONFIG_FILES([
 Makefile
@@ -219,7 +220,6 @@ lib/python/Plugins/Extensions/MediaPlayer/Makefile
 lib/python/Plugins/Extensions/MediaPlayer/meta/Makefile
 lib/python/Plugins/Extensions/MediaScanner/Makefile
 lib/python/Plugins/Extensions/MediaScanner/meta/Makefile
-lib/python/Plugins/Extensions/Modem/Makefile
 lib/python/Plugins/Extensions/PicturePlayer/Makefile
 lib/python/Plugins/Extensions/PicturePlayer/meta/Makefile
 lib/python/Plugins/Extensions/PicturePlayer/data/Makefile

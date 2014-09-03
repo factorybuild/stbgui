@@ -52,10 +52,10 @@ class SecConfigure:
 		sec.setLNBLOFL(9750000)
 		sec.setLNBLOFH(10600000)
 		sec.setLNBThreshold(11700000)
-		sec.setLNBIncreasedVoltage(lnbParam.OFF)
+		sec.setLNBIncreasedVoltage(False)
 		sec.setRepeats(0)
 		sec.setFastDiSEqC(fastDiSEqC)
-		sec.setSeqRepeat(0)
+		sec.setSeqRepeat(False)
 		sec.setCommandOrder(0)
 
 		#user values
@@ -373,9 +373,9 @@ class SecConfigure:
 #					pass # nyi in drivers
 
 				if currLnb.increased_voltage.value:
-					sec.setLNBIncreasedVoltage(lnbParam.ON)
+					sec.setLNBIncreasedVoltage(True)
 				else:
-					sec.setLNBIncreasedVoltage(lnbParam.OFF)
+					sec.setLNBIncreasedVoltage(False)
 
 				dm = currLnb.diseqcMode.value
 				if dm == "none":
@@ -713,7 +713,7 @@ class NimManager:
 #			print "CABLIST", self.cablesList
 #			print "TRANSPONDERS", self.transponders
 
-		if self.hasNimType("DVB-T"):
+		if self.hasNimType("DVB-T") or self.hasNimType("DVB-T2"):
 			print "Reading terrestrial.xml"
 			db.readTerrestrials(self.terrestrialsList, self.transpondersterrestrial)
 #			print "TERLIST", self.terrestrialsList
@@ -784,7 +784,7 @@ class NimManager:
 					# "Mode 0" -> ["Mode", "0"]
 					split2 = split[0].split(" ")
 					modes = entries[current_slot].get("multi_type", {})
-					modes[split2[1]] = split[1]
+					modes[split2[1]] = split[1].strip()
 					entries[current_slot]["multi_type"] = modes
 			elif line.startswith("I2C_Device:"):
 				input = int(line[len("I2C_Device:") + 1:])

@@ -36,7 +36,7 @@ import time
 import cPickle as pickle
 
 config.movielist = ConfigSubsection()
-config.movielist.moviesort = ConfigInteger(default=MovieList.SORT_RECORDED)
+config.movielist.moviesort = ConfigInteger(default=MovieList.SORT_GROUPWISE)
 config.movielist.listtype = ConfigInteger(default=MovieList.LISTTYPE_MINIMAL)
 config.movielist.description = ConfigInteger(default=MovieList.SHOW_DESCRIPTION)
 config.movielist.last_videodir = ConfigText(default=resolveFilename(SCOPE_HDD))
@@ -45,7 +45,7 @@ config.movielist.videodirs = ConfigLocations(default=[resolveFilename(SCOPE_HDD)
 config.movielist.last_selected_tags = ConfigSet([], default=[])
 config.movielist.play_audio_internal = ConfigYesNo(default=True)
 config.movielist.settings_per_directory = ConfigYesNo(default=True)
-config.movielist.root = ConfigSelection(default="/media", choices=["/","/media","/media/hdd","/media/hdd/movie"])
+config.movielist.root = ConfigSelection(default="/media", choices=["/","/media","/media/hdd","/media/hdd/movie","/media/usb","/media/usb/movie"])
 config.movielist.hide_extensions = ConfigYesNo(default=False)
 config.movielist.stop_service = ConfigYesNo(default=True)
 
@@ -55,7 +55,9 @@ preferredTagEditor = None
 
 # this kludge is needed because ConfigSelection only takes numbers
 # and someone appears to be fascinated by 'enums'.
-l_moviesort = [(str(MovieList.SORT_RECORDED), _("by date"), '03/02/01'),
+l_moviesort = [
+	(str(MovieList.SORT_GROUPWISE), _("default") , '02/01 & A-Z'),
+	(str(MovieList.SORT_RECORDED), _("by date"), '03/02/01'),
 	(str(MovieList.SORT_ALPHANUMERIC), _("alphabetic"), 'A-Z'),
 	(str(MovieList.SORT_ALPHANUMERIC_FLAT), _("flat alphabetic"), 'A-Z Flat'),
 	(str(MovieList.SHUFFLE), _("shuffle"), '?'),

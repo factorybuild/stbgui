@@ -327,7 +327,7 @@
 			<key id="KEY_RIGHT" mapto="seekFwd" flags="m" />
 		</device>
 
-		<key id="KEY_OK" mapto="unPauseService" flags="m" />
+		<key id="KEY_OK" mapto="okButton" flags="m" />
 
 		<key id="KEY_1" mapto="seekdef:1" flags="m" />
 		<key id="KEY_3" mapto="seekdef:3" flags="m" />
@@ -506,6 +506,9 @@
 		<key id="KEY_NEXT" mapto="nextMarker" flags="m" />
 		<key id="KEY_BACK" mapto="prevMarker" flags="m" />
 		<key id="KEY_FORWARD" mapto="nextMarker" flags="m" />
+		<key id="KEY_LEFT" mapto="keyLeft" flags="m" />
+		<key id="KEY_RIGHT" mapto="keyRight" flags="m" />
+		<key id="KEY_RECORD" mapto="keyRecord" flags="m" />
 	</map>
 
 	<map context="ChannelSelectEPGActions">
@@ -599,6 +602,9 @@
 		<key id="KEY_SUBTITLE" mapto="yellow" flags="m" />
 		<key id="KEY_YELLOW" mapto="yellow" flags="m" />
 		<key id="KEY_BLUE" mapto="blue" flags="m" />
+		<key id="KEY_CHANNELUP" mapto="volumeUp" flags="m" />
+		<key id="KEY_CHANNELDOWN" mapto="volumeDown" flags="m" />
+		<key id="KEY_MUTE" mapto="volumeMute" flags="m" />
 	</map>
 
 	<map context="ColorActions">

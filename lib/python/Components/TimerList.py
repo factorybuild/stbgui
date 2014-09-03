@@ -5,6 +5,7 @@ from Tools.FuzzyDate import FuzzyTime
 
 from enigma import eListboxPythonMultiContent, eListbox, gFont, \
 	RT_HALIGN_LEFT, RT_HALIGN_RIGHT, RT_VALIGN_CENTER, RT_VALIGN_TOP, RT_VALIGN_BOTTOM
+from Tools.Alternatives import GetWithAlternative
 from Tools.LoadPixmap import LoadPixmap
 from timer import TimerEntry
 from Tools.Directories import resolveFilename, SCOPE_CURRENT_SKIN, SCOPE_SKIN_IMAGE
@@ -70,8 +71,8 @@ class TimerList(HTMLComponent, GUIComponent, object):
 		if timer.disabled:
 			state = _("disabled")
 
-		res.append((eListboxPythonMultiContent.TYPE_TEXT, 24, 25, 126, 20, 1, RT_HALIGN_LEFT|RT_VALIGN_TOP, state))
-		res.append((eListboxPythonMultiContent.TYPE_TEXT, 200,27, 100, 18, 2, RT_HALIGN_RIGHT|RT_VALIGN_TOP, self.getOrbitalPos(timer.service_ref)))
+		res.append((eListboxPythonMultiContent.TYPE_TEXT, 24, 25, 136, 20, 1, RT_HALIGN_LEFT|RT_VALIGN_TOP, state))
+		res.append((eListboxPythonMultiContent.TYPE_TEXT, 165,27, 60, 18, 2, RT_HALIGN_LEFT|RT_VALIGN_TOP, self.getOrbitalPos(timer.service_ref)))
 		if icon:
 			res.append((eListboxPythonMultiContent.TYPE_PIXMAP_ALPHATEST, 0, 0, 20, 20, icon))
 		return res
@@ -121,14 +122,19 @@ class TimerList(HTMLComponent, GUIComponent, object):
 		self.l.entryRemoved(idx)
 
 	def getOrbitalPos(self, ref):
-		refstr = str(ref)
+		refstr = ''
+		if hasattr(ref, 'sref'):
+			refstr = str(ref.sref)
+		else:
+			refstr = str(ref)
+		refstr = refstr and GetWithAlternative(refstr)
 		if '%3a//' in refstr:
 			return "%s" % _("Stream")
-		op = int(str(ref).split(':', 10)[6][:-4] or "0",16)
+		op = int(refstr.split(':', 10)[6][:-4] or "0",16)
 		if op == 0xeeee:
 			return "%s" % _("DVB-T")
 		if op == 0xffff:
-			return "%s" % _("DVB_C")
+			return "%s" % _("DVB-C")
 		direction = 'E'
 		if op > 1800:
 			op = 3600 - op

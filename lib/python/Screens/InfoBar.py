@@ -1,5 +1,6 @@
 from Tools.Profile import profile
 from Tools.BoundFunction import boundFunction
+from enigma import eServiceReference
 
 # workaround for required config entry dependencies.
 import Screens.MovieSelection
@@ -138,10 +139,11 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 
 	def ChannelSelectionRadioClosed(self, *arg):
 		self.rds_display.show()  # in InfoBarRdsDecoder
+		self.servicelist.correctChannelNumber()
 
 	def showMovies(self, defaultRef=None):
 		self.lastservice = self.session.nav.getCurrentlyPlayingServiceOrGroup()
-		self.session.openWithCallback(self.movieSelected, Screens.MovieSelection.MovieSelection, defaultRef, timeshiftEnabled = self.timeshiftEnabled())
+		self.session.openWithCallback(self.movieSelected, Screens.MovieSelection.MovieSelection, defaultRef or eServiceReference(config.usage.last_movie_played.value), timeshiftEnabled = self.timeshiftEnabled())
 
 	def movieSelected(self, service):
 		ref = self.lastservice
@@ -237,7 +239,9 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 				"channelUp": (self.openEPGserviceList, _("open EPG channel selection...")),
 				"channelDown": (self.openEPGserviceList, _("open EPG channel selection...")),
 				"leavePlayer": (self.leavePlayer, _("leave movie player...")),
-				"leavePlayerOnExit": (self.leavePlayerOnExit, _("leave movie player..."))
+				"leavePlayerOnExit": (self.leavePlayerOnExit, _("leave movie player...")),
+				"channelUp": (self.channelUp, _("when PiPzap enabled zap channel up...")),
+				"channelDown": (self.channelDown, _("when PiPzap enabled zap channel down...")),
 			})
 
 		self["DirectionActions"] = HelpableActionMap(self, "DirectionActions",
@@ -268,7 +272,11 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 	def __onClose(self):
 		from Screens.MovieSelection import playlist
 		del playlist[:]
+		if not config.movielist.stop_service.value:
+			Screens.InfoBar.InfoBar.instance.callServiceStarted()
 		self.session.nav.playService(self.lastservice)
+		config.usage.last_movie_played.value = self.cur_service.toString()
+		config.usage.last_movie_played.save()
 
 	def handleLeave(self, how):
 		self.is_closing = True
@@ -452,6 +460,18 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 		else:
 			InfoBarSeek.seekBack(self)
 
+	def channelUp(self):
+		if config.usage.zap_with_ch_buttons.value and self.servicelist.dopipzap:
+			self.zapDown()
+		else:
+			return 0
+
+	def channelDown(self):
+		if config.usage.zap_with_ch_buttons.value and self.servicelist.dopipzap:
+			self.zapUp()
+		else:
+			return 0
+
 	def switchChannelDown(self):
 		if "keep" not in config.usage.servicelist_cursor_behavior.value:
 			self.servicelist.moveDown()
@@ -474,8 +494,10 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 							slist.prevBouquet()
 					slist.moveUp()
 					cur = slist.getCurrentSelection()
-					if not cur or (not (cur.flags & 64)) or cur.toString() == prev:
-						break
+					if cur:
+						playable = not (cur.flags & (64|8)) and hasattr(self.session, "pip") and self.session.pip.isPlayableForPipService(cur)
+						if cur.toString() == prev or playable:
+							break
 		else:
 			slist.moveUp()
 		slist.zap(enable_pipzap = True)
@@ -492,8 +514,10 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 					else:
 						slist.moveDown()
 					cur = slist.getCurrentSelection()
-					if not cur or (not (cur.flags & 64)) or cur.toString() == prev:
-						break
+					if cur:
+						playable = not (cur.flags & (64|8)) and hasattr(self.session, "pip") and self.session.pip.isPlayableForPipService(cur)
+						if cur.toString() == prev or playable:
+							break
 		else:
 			slist.moveDown()
 		slist.zap(enable_pipzap = True)
@@ -579,4 +603,4 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 		Notifications.AddPopup(text = _("%s/%s: %s") % (index, n, self.ref2HumanName(ref)), type = MessageBox.TYPE_INFO, timeout = 5)
 
 	def ref2HumanName(self, ref):
-		return enigma.eServiceCenter.getInstance().info(ref).getName(ref)
+		return enigma.eServiceCenter.getInstance().info(ref).getName(ref)		
