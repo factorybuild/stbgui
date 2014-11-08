@@ -22,7 +22,7 @@ from Screens import ScreenSaver
 from Screens import Standby
 from Screens.ChoiceBox import ChoiceBox
 from Screens.Dish import Dish
-from Screens.EventView import EventViewEPGSelect, EventViewSimple, EventViewRecording
+from Screens.EventView import EventViewEPGSelect, EventViewSimple
 from Screens.InputBox import InputBox
 from Screens.MessageBox import MessageBox
 from Screens.MinuteInput import MinuteInput
@@ -329,14 +329,26 @@ class InfoBarShowHide(InfoBarScreenSaver):
 
 	def toggleShow(self):
 		if self.__state == self.STATE_HIDDEN:
-			self.show()
-			if self.secondInfoBarScreen:
-				self.secondInfoBarScreen.hide()
-		elif isStandardInfoBar(self) and config.usage.show_second_infobar.value == "EPG":
-			self.showDefaultEPG()
+			self.showFirstInfoBar()
+		else:
+			self.showSecondInfoBar()
+
+	def showSecondInfoBar(self):
+		if isStandardInfoBar(self) and config.usage.show_second_infobar.value == "EPG":
+			if not(hasattr(self, "hotkeyGlobal") and self.hotkeyGlobal("info") != 0):
+				self.showDefaultEPG()
 		elif self.secondInfoBarScreen and config.usage.show_second_infobar.value and not self.secondInfoBarScreen.shown:
+			self.show()
 			self.secondInfoBarScreen.show()
 			self.startHideTimer()
+		else:
+			self.hide()
+			self.hideTimer.stop()
+
+	def showFirstInfoBar(self):
+		if self.__state == self.STATE_HIDDEN or self.secondInfoBarScreen and self.secondInfoBarScreen.shown:
+			self.secondInfoBarScreen and self.secondInfoBarScreen.hide()
+			self.show()
 		else:
 			self.hide()
 			self.hideTimer.stop()
@@ -733,6 +745,10 @@ class InfoBarChannelSelection:
 		self.servicelist.showSatellites()
 		self.session.execDialog(self.servicelist)
 
+	def openFavouritesList(self):
+		self.servicelist.showFavourites()
+		self.openServiceList()
+
 	def openServiceList(self):
 		self.session.execDialog(self.servicelist)
 
@@ -846,8 +862,6 @@ class InfoBarEPG:
 		self.bouquetSel = None
 		self.eventView = None
 		self.epglist = []
-		self.defaultEPGType = self.getDefaultEPGtype()
-		self.defaultGuideType = self.getDefaultGuidetype()
 		self.__event_tracker = ServiceEventTracker(screen=self, eventmap=
 			{
 				iPlayableService.evUpdatedEventInfo: self.__evEventInfoChanged,
@@ -858,8 +872,6 @@ class InfoBarEPG:
 				"showEventInfo": (self.showDefaultEPG, _("Show EPG...")),
 				"showEventInfoSingleEPG": (self.showSingleEPG, _("Show single service EPG")),
 				"showEventInfoMultiEPG": (self.showMultiEPG, _("Show multi channel EPG")),
-				"showEventInfoPlugin": (self.showEventInfoPlugins, _("List EPG functions...")),
-				"showEventGuidePlugin": (self.showEventGuidePlugins, _("List EPG functions...")),
 				"showInfobarOrEpgWhenInfobarAlreadyVisible": self.showEventInfoWhenNotVisible,
 			})
 
@@ -872,20 +884,6 @@ class InfoBarEPG:
 		pluginlist.append((_("Multi EPG"), self.openMultiServiceEPG, "multi_epg"))
 		pluginlist.append((_("Current event EPG"), self.openEventView, "event_epg"))
 		return pluginlist
-
-	def getDefaultEPGtype(self):
-		config.usage.defaultEPGType=ConfigText()
-		for plugin in self.getEPGPluginList():
-			if plugin[2] == config.usage.defaultEPGType.value:
-				return plugin[1]
-		return None
-
-	def getDefaultGuidetype(self):
-		config.usage.defaultGuideType=ConfigText(default="/usr/lib/enigma2/python/Plugins/Extensions/GraphMultiEPG")
-		for plugin in self.getEPGPluginList():
-			if plugin[2] == config.usage.defaultGuideType.value:
-				return plugin[1]
-		return None
 
 	def showEventInfoWhenNotVisible(self):
 		if self.shown:
@@ -1005,23 +1003,20 @@ class InfoBarEPG:
 		self.serviceSel = None
 
 	def openSingleServiceEPG(self):
-		from Components.ServiceEventTracker import InfoBarCount
-		if InfoBarCount > 1:
-			self.openMultiServiceEPG(False)
-		else:
-			ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
-			if ref:
-				if self.servicelist.getMutableList() is not None: # bouquet in channellist
-					current_path = self.servicelist.getRoot()
-					services = self.getBouquetServices(current_path)
-					self.serviceSel = SimpleServicelist(services)
-					if self.serviceSel.selectService(ref):
-						self.epg_bouquet = current_path
-						self.session.openWithCallback(self.SingleServiceEPGClosed, EPGSelection, ref, self.zapToService, serviceChangeCB = self.changeServiceCB)
-					else:
-						self.session.openWithCallback(self.SingleServiceEPGClosed, EPGSelection, ref)
+		ref = self.servicelist.lastservice.value
+		ref = ref and eServiceReference(ref)
+		if ref:
+			if self.servicelist.getMutableList(): # bouquet in channellist
+				current_path = self.servicelist.getRoot()
+				services = self.getBouquetServices(current_path)
+				self.serviceSel = SimpleServicelist(services)
+				if self.serviceSel.selectService(ref):
+					self.epg_bouquet = current_path
+					self.session.openWithCallback(self.SingleServiceEPGClosed, EPGSelection, ref, self.zapToService, serviceChangeCB=self.changeServiceCB)
 				else:
-					self.session.open(EPGSelection, ref)
+					self.session.openWithCallback(self.SingleServiceEPGClosed, EPGSelection, ref)
+			else:
+				self.session.open(EPGSelection, ref)
 
 	def runPlugin(self, plugin):
 		plugin(session = self.session, servicelist = self.servicelist)
@@ -1029,7 +1024,6 @@ class InfoBarEPG:
 	def showEventInfoPlugins(self):
 		pluginlist = self.getEPGPluginList()
 		if pluginlist:
-			pluginlist.append((_("Select default EPG type..."), self.SelectDefaultInfoPlugin))
 			self.session.openWithCallback(self.EventInfoPluginChosen, ChoiceBox, title=_("Please choose an extension..."), list = pluginlist, skin_name = "EPGExtensionsList")
 		else:
 			self.openSingleServiceEPG()
@@ -1037,36 +1031,6 @@ class InfoBarEPG:
 	def EventInfoPluginChosen(self, answer):
 		if answer is not None:
 			answer[1]()
-
-	def SelectDefaultInfoPlugin(self):
-		self.session.openWithCallback(self.DefaultInfoPluginChosen, ChoiceBox, title=_("Please select a default EPG type..."), list = self.getEPGPluginList(True), skin_name = "EPGExtensionsList")
-
-	def DefaultInfoPluginChosen(self, answer):
-		if answer is not None:
-			self.defaultEPGType = answer[1]
-			config.usage.defaultEPGType.value = answer[2]
-			config.usage.defaultEPGType.save()
-
-	def showEventGuidePlugins(self):
-		pluginlist = self.getEPGPluginList()
-		if pluginlist:
-			pluginlist.append((_("Select default EPG type..."), self.SelectDefaultGuidePlugin))
-			self.session.openWithCallback(self.EventGuidePluginChosen, ChoiceBox, title=_("Please choose an extension..."), list = pluginlist, skin_name = "EPGExtensionsList")
-		else:
-			self.openSingleServiceEPG()
-
-	def EventGuidePluginChosen(self, answer):
-		if answer is not None:
-			answer[1]()
-
-	def SelectDefaultGuidePlugin(self):
-		self.session.openWithCallback(self.DefaultGuidePluginChosen, ChoiceBox, title=_("Please select a default EPG type..."), list = self.getEPGPluginList(True), skin_name = "EPGExtensionsList")
-
-	def DefaultGuidePluginChosen(self, answer):
-		if answer is not None:
-			self.defaultGuideType = answer[1]
-			config.usage.defaultGuideType.value = answer[2]
-			config.usage.defaultGuideType.save()
 
 	def openSimilarList(self, eventid, refstr):
 		self.session.open(EPGSelection, refstr, None, eventid)
@@ -1090,22 +1054,13 @@ class InfoBarEPG:
 				self.eventView.setEvent(self.epglist[0])
 
 	def showDefaultEPG(self):
-		if self.defaultEPGType:
-			self.defaultEPGType()
-		else:
-			self.openEventView()
+		self.openEventView()
 
 	def showSingleEPG(self):
-		if self.defaultGuideType:
-			self.defaultGuideType()
-		else:
-			self.openSingleServiceEPG()
+		self.openSingleServiceEPG()
 
 	def showMultiEPG(self):
-		if self.defaultGuideType:
-			self.defaultGuideType()
-		else:
-			self.openMultiServiceEPG()
+		self.openMultiServiceEPG()
 
 	def openEventView(self):
 		from Components.ServiceEventTracker import InfoBarCount
@@ -1122,7 +1077,7 @@ class InfoBarEPG:
 			if ptr:
 				epglist.append(ptr)
 			if epglist:
-				self.session.open(EventViewRecording, epglist[0], ServiceReference(ref), self.eventViewCallback, self.openMultiServiceEPG, self.openSimilarList)
+				self.session.open(EventViewEPGSelect, epglist[0], ServiceReference(ref), self.eventViewCallback, self.openSingleServiceEPG, self.openMultiServiceEPG, self.openSimilarList)
 		else:
 			ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
 			self.getNowNext()
@@ -2152,20 +2107,24 @@ class InfoBarPiP:
 			return _("Activate Picture in Picture")
 
 	def swapPiP(self):
-		swapservice = self.session.nav.getCurrentlyPlayingServiceOrGroup()
-		pipref = self.session.pip.getCurrentService()
-		if swapservice and pipref and pipref.toString() != swapservice.toString():
-			currentServicePath = self.servicelist.getCurrentServicePath()
-			self.servicelist.setCurrentServicePath(self.session.pip.servicePath, doZap=False)
-			self.session.pip.playService(swapservice)
-			self.session.nav.playService(pipref, checkParentalControl=False, adjust=False)
-			self.session.pip.servicePath = currentServicePath
-			if self.servicelist.dopipzap:
-				# This unfortunately won't work with subservices
-				self.servicelist.setCurrentSelection(self.session.pip.getCurrentService())
+		if self.pipShown():
+			swapservice = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+			pipref = self.session.pip.getCurrentService()
+			if swapservice and pipref and pipref.toString() != swapservice.toString():
+				currentServicePath = self.servicelist.getCurrentServicePath()
+				currentBouquet = self.servicelist and self.servicelist.getRoot()
+				self.servicelist.setCurrentServicePath(self.session.pip.servicePath, doZap=False)
+				self.session.pip.playService(swapservice)
+				self.session.nav.playService(pipref, checkParentalControl=False, adjust=False)
+				self.session.pip.servicePath = currentServicePath
+				self.session.pip.servicePath[1] = currentBouquet
+				if self.servicelist.dopipzap:
+					# This unfortunately won't work with subservices
+					self.servicelist.setCurrentSelection(self.session.pip.getCurrentService())
 
 	def movePiP(self):
-		self.session.open(PiPSetup, pip = self.session.pip)
+		if self.pipShown():
+			self.session.open(PiPSetup, pip = self.session.pip)
 
 	def pipDoHandle0Action(self):
 		use = config.usage.pip_zero_button.value
@@ -2763,8 +2722,8 @@ class InfoBarCueSheetSupport:
 			if (last > 900000) and (not length[1]  or (last < length[1] - 900000)):
 				self.resume_point = last
 				l = last / 90000
-				if config.usage.on_movie_start.value == "ask" or not length[1]:
-					Notifications.AddNotificationWithCallback(self.playLastCB, MessageBox, _("Do you want to resume this playback?") + "\n" + (_("Resume position at %s") % ("%d:%02d:%02d" % (l/3600, l%3600/60, l%60))), timeout=10)
+				if "ask" in config.usage.on_movie_start.value or not length[1]:
+					Notifications.AddNotificationWithCallback(self.playLastCB, MessageBox, _("Do you want to resume this playback?") + "\n" + (_("Resume position at %s") % ("%d:%02d:%02d" % (l/3600, l%3600/60, l%60))), timeout=10, default="yes" in config.usage.on_movie_start.value)
 				elif config.usage.on_movie_start.value == "resume":
 # TRANSLATORS: The string "Resuming playback" flashes for a moment
 # TRANSLATORS: at the start of a movie, when the user has selected

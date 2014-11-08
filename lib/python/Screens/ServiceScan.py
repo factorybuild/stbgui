@@ -1,4 +1,5 @@
 from Screen import Screen
+import Screens.InfoBar
 from Components.ServiceScan import ServiceScan as CScan
 from Components.ProgressBar import ProgressBar
 from Components.Label import Label
@@ -69,7 +70,7 @@ class ServiceScan(Screen):
 		self.scanList = scanList
 
 		if hasattr(session, 'infobar'):
-			self.currentInfobar = session.infobar
+			self.currentInfobar = Screens.InfoBar.InfoBar.instance
 			self.currentServiceList = self.currentInfobar.servicelist
 			if self.session.pipshown and self.currentServiceList:
 				if self.currentServiceList.dopipzap:
@@ -100,7 +101,7 @@ class ServiceScan(Screen):
 			"cancel": self.cancel,
 			"menu": self.doCloseRecursive
 		}, -2)
-
+		self.setTitle("Service scan")
 		self.onFirstExecBegin.append(self.doServiceScan)
 
 	def doServiceScan(self):
