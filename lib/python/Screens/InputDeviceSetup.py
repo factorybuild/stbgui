@@ -296,16 +296,18 @@ class InputDeviceSetup(Screen, ConfigListScreen):
 class RemoteControlType(Screen, ConfigListScreen):
 	rcList = [
 			("0", _("Default")),
-			("11", _("et9x00/6500")),
+			("11", _("et9200/9500/6500")),
 			("13", _("et4000")),
 			("7", _("et5000/6000")),
 			("9", _("et8000/et10000")),
 			("4", _("DMM normal")),
+			("5", _("et9000/et9100")),
 			("6", _("DMM advanced")),
 			("14", _("xp1000")),
 			("8", _("VU+")),
 			("18", _("F1/F3")),
-			("16", _("et7x00"))
+			("16", _("HD1100/et7x00")),
+			("19", _("HD2400"))
 		]
 
 	defaultRcList = [
@@ -314,13 +316,16 @@ class RemoteControlType(Screen, ConfigListScreen):
 			("et6000", 7),
 			("et6500", 11),
 			("et8000", 9),
-			("et9000", 11),
+			("et9000", 5),
+			("et9100", 5),
 			("et9200", 11),
 			("et9500", 11),
 			("et10000", 9),
 			("formuler1", 18),
 			("formuler3", 18),
 			("xp1000", 14),
+			("hd1100", 16),
+			("hd2400", 19),
 			("et7x00", 16)
 		]
 

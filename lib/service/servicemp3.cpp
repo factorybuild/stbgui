@@ -459,7 +459,7 @@ eServiceMP3::eServiceMP3(eServiceReference ref):
 		m_sourceinfo.audiotype = atMP3;
 	else if ( strcasecmp(ext, ".wma") == 0 )
 		m_sourceinfo.audiotype = atWMA;
-	else if ( (strncmp(filename, "/autofs/", 8) || strncmp(filename+strlen(filename)-13, "/track-", 7) || strcasecmp(ext, ".wav")) == 0 )
+	else if ( (strncmp(filename, "/media/sr", 9) || strncmp(filename+strlen(filename)-13, "/track-", 7) || strcasecmp(ext, ".wav")) == 0 )
 		m_sourceinfo.containertype = ctCDA;
 	if ( strcasecmp(ext, ".dat") == 0 )
 	{
@@ -734,6 +734,8 @@ RESULT eServiceMP3::stop()
 	gst_element_set_state(m_gst_playbin, GST_STATE_NULL);
 	m_state = stStopped;
 	m_nownext_timer->stop();
+	if (m_streamingsrc_timeout)
+		m_streamingsrc_timeout->stop();
 
 	return 0;
 }
@@ -1084,6 +1086,7 @@ int eServiceMP3::getInfo(int w)
 	case sTagCRC:
 		tag = "has-crc";
 		break;
+	case sBuffer: return m_bufferInfo.bufferPercent;
 	default:
 		return resNA;
 	}
@@ -1608,6 +1611,8 @@ void eServiceMP3::gstBusCall(GstMessage *msg)
 						m_seek_paused = false;
 						gst_element_set_state(m_gst_playbin, GST_STATE_PAUSED);
 					}
+					else
+						m_event((iPlayableService*)this, evGstreamerPlayStarted);
 				}	break;
 				case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
 				{
@@ -1684,7 +1689,13 @@ void eServiceMP3::gstBusCall(GstMessage *msg)
 			if ( gv_image )
 			{
 				GstBuffer *buf_image;
-				buf_image = gst_value_get_buffer (gv_image);
+#if GST_VERSION_MAJOR < 1
+				buf_image = gst_value_get_buffer(gv_image);
+#else
+				GstSample *sample;
+				sample = (GstSample *)g_value_get_boxed(gv_image);
+				buf_image = gst_sample_get_buffer(sample);
+#endif
 				int fd = open("/tmp/.id3coverart", O_CREAT|O_WRONLY|O_TRUNC, 0644);
 				if (fd >= 0)
 				{
@@ -1945,9 +1956,11 @@ void eServiceMP3::gstBusCall(GstMessage *msg)
 					owner = 0;
 				if ( owner )
 				{
+					GstState state;
+					gst_element_get_state(m_gst_playbin, &state, NULL, 0LL);
 					GstElementFactory *factory = gst_element_get_factory(GST_ELEMENT(owner));
 					const gchar *name = gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory));
-					if (!strcmp(name, "souphttpsrc"))
+					if (!strcmp(name, "souphttpsrc") && (state == GST_STATE_READY) && !m_streamingsrc_timeout->isActive())
 					{
 						m_streamingsrc_timeout->start(HTTP_TIMEOUT*1000, true);
 						g_object_set (G_OBJECT (owner), "timeout", HTTP_TIMEOUT, NULL);
@@ -2370,7 +2383,7 @@ void eServiceMP3::pushSubtitles()
 
 		// showtime
 
-		if (m_subtitle_widget)
+		if (m_subtitle_widget && !m_paused)
 		{
 			//eDebug("*** current sub actual, show!");
 

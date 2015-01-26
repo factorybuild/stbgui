@@ -9,7 +9,7 @@ from enigma import eSize, ePoint, eRect, gFont, eWindow, eLabel, ePixmap, eWindo
 from Components.config import ConfigSubsection, ConfigText, config
 from Components.Converter.Converter import Converter
 from Components.Sources.Source import Source, ObsoleteSource
-from Tools.Directories import resolveFilename, SCOPE_SKIN, SCOPE_SKIN_IMAGE, SCOPE_FONTS, SCOPE_CURRENT_SKIN, SCOPE_CONFIG, fileExists
+from Tools.Directories import resolveFilename, SCOPE_SKIN, SCOPE_FONTS, SCOPE_CURRENT_SKIN, SCOPE_CONFIG, fileExists
 from Tools.Import import my_import
 from Tools.LoadPixmap import LoadPixmap
 from Components.RcModel import rc_model
@@ -21,6 +21,8 @@ fonts = {
 	"Body": ("Regular", 18, 22, 16),
 	"ChoiceList": ("Regular", 20, 24, 18),
 }
+
+parameters = {}
 
 def dump(x, i=0):
 	print " " * i + str(x)
@@ -207,7 +209,7 @@ def collectAttributes(skinAttributes, node, context, skin_path_prefix=None, igno
 	for attrib, value in node.items():
 		if attrib not in ignore:
 			if attrib in filenames:
-				value = resolveFilename(SCOPE_SKIN_IMAGE, value, path_prefix=skin_path_prefix)
+				value = resolveFilename(SCOPE_CURRENT_SKIN, value, path_prefix=skin_path_prefix)
 			# Bit of a hack this, really. When a window has a flag (e.g. wfNoBorder)
 			# it needs to be set at least before the size is set, in order for the
 			# window dimensions to be calculated correctly in all situations.
@@ -245,10 +247,10 @@ def loadPixmap(path, desktop):
 	return ptr
 
 class AttributeParser:
-	def __init__(self, guiObject, desktop, scale = ((1,1),(1,1))):
+	def __init__(self, guiObject, desktop, scale=((1,1),(1,1))):
 		self.guiObject = guiObject
 		self.desktop = desktop
-		self.scale = scale
+		self.scaleTuple = scale
 	def applyOne(self, attrib, value):
 		try:
 			getattr(self, attrib)(value)
@@ -258,30 +260,25 @@ class AttributeParser:
 			print "[Skin] Error:", ex
 	def applyAll(self, attrs):
 		for attrib, value in attrs:
-			try:
-				getattr(self, attrib)(value)
-			except AttributeError:
-				print "[Skin] Attribute not implemented:", attrib, "value:", value
-			except SkinError, ex:
-				print "[Skin] Error:", ex
+			self.applyOne(attrib, value)
 	def conditional(self, value):
 		pass
 	def position(self, value):
 		if isinstance(value, tuple):
 			self.guiObject.move(ePoint(*value))
 		else:
-			self.guiObject.move(parsePosition(value, self.scale, self.guiObject, self.desktop, self.guiObject.csize()))
+			self.guiObject.move(parsePosition(value, self.scaleTuple, self.guiObject, self.desktop, self.guiObject.csize()))
 	def size(self, value):
 		if isinstance(value, tuple):
 			self.guiObject.resize(eSize(*value))
 		else:
-			self.guiObject.resize(parseSize(value, self.scale, self.guiObject, self.desktop))
+			self.guiObject.resize(parseSize(value, self.scaleTuple, self.guiObject, self.desktop))
 	def title(self, value):
 		self.guiObject.setTitle(_(value))
 	def text(self, value):
 		self.guiObject.setText(_(value))
 	def font(self, value):
-		self.guiObject.setFont(parseFont(value, self.scale))
+		self.guiObject.setFont(parseFont(value, self.scaleTuple))
 	def zPosition(self, value):
 		self.guiObject.setZPosition(int(value))
 	def itemHeight(self, value):
@@ -342,7 +339,7 @@ class AttributeParser:
 			print "halign must be either left, center, right or block!"
 	def textOffset(self, value):
 		x, y = value.split(',')
-		self.guiObject.setTextOffset(ePoint(int(x) * self.scale[0][0] / self.scale[0][1], int(y) * self.scale[1][0] / self.scale[1][1]))
+		self.guiObject.setTextOffset(ePoint(int(x) * self.scaleTuple[0][0] / self.scaleTuple[0][1], int(y) * self.scaleTuple[1][0] / self.scaleTuple[1][1]))
 	def flags(self, value):
 		flags = value.split(',')
 		for f in flags:
@@ -382,16 +379,16 @@ class AttributeParser:
 		self.guiObject.setItemHeight(int(value))
 	def pointer(self, value):
 		(name, pos) = value.split(':')
-		pos = parsePosition(pos, self.scale)
+		pos = parsePosition(pos, self.scaleTuple)
 		ptr = loadPixmap(name, self.desktop)
 		self.guiObject.setPointer(0, ptr, pos)
 	def seek_pointer(self, value):
 		(name, pos) = value.split(':')
-		pos = parsePosition(pos, self.scale)
+		pos = parsePosition(pos, self.scaleTuple)
 		ptr = loadPixmap(name, self.desktop)
 		self.guiObject.setPointer(1, ptr, pos)
 	def shadowOffset(self, value):
-		self.guiObject.setShadowOffset(parsePosition(value, self.scale))
+		self.guiObject.setShadowOffset(parsePosition(value, self.scaleTuple))
 	def noWrap(self, value):
 		self.guiObject.setNoWrap(1)
 
@@ -442,7 +439,7 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 		if filename:
 			skinfile = resolveFilename(SCOPE_CURRENT_SKIN, filename, path_prefix=path_prefix)
 			if not fileExists(skinfile):
-				skinfile = resolveFilename(SCOPE_SKIN_IMAGE, filename, path_prefix=path_prefix)
+				skinfile = resolveFilename(SCOPE_CURRENT_SKIN, filename, path_prefix=path_prefix)
 			if fileExists(skinfile):
 				print "[SKIN] loading include:", skinfile
 				loadSkin(skinfile)
@@ -482,8 +479,8 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 			addFont(resolved_font, name, scale, is_replacement, render)
 			#print "Font: ", resolved_font, name, scale, is_replacement
 		for alias in c.findall("alias"):
-		        get = alias.attrib.get
-		        try:
+			get = alias.attrib.get
+			try:
 				name = get("name")
 				font = get("font")
 				size = int(get("size"))
@@ -494,6 +491,15 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 			except Exception, ex:
 				print "[SKIN] bad font alias", ex
 
+	for c in skin.findall("parameters"):
+		for parameter in c.findall("parameter"):
+			get = parameter.attrib.get
+			try:
+				name = get("name")
+				value = get("value")
+				parameters[name] = map(int, value.split(","))
+			except Exception, ex:
+				print "[SKIN] bad parameter", ex
 
 	for c in skin.findall("subtitles"):
 		from enigma import eWidget, eSubtitleWidget
@@ -547,7 +553,7 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 				bpName = get_attr("pos")
 				filename = get_attr("filename")
 				if filename and bpName:
-					png = loadPixmap(resolveFilename(SCOPE_SKIN_IMAGE, filename, path_prefix=path_prefix), desktop)
+					png = loadPixmap(resolveFilename(SCOPE_CURRENT_SKIN, filename, path_prefix=path_prefix), desktop)
 					style.setPixmap(eWindowStyleSkinned.__dict__[bsName], eWindowStyleSkinned.__dict__[bpName], png)
 				#print "  borderset:", bpName, filename
 		for color in windowstyle.findall("color"):

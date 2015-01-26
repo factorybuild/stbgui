@@ -1,6 +1,7 @@
 from Screen import Screen
 from Components.Button import Button
 from Components.ActionMap import HelpableActionMap, ActionMap, NumberActionMap
+from Components.ChoiceList import ChoiceList, ChoiceEntryComponent
 from Components.MenuList import MenuList
 from Components.MovieList import MovieList, resetMoviePlayState, AUDIO_EXTENSIONS, DVD_EXTENSIONS, IMAGE_EXTENSIONS
 from Components.DiskInfo import DiskInfo
@@ -216,6 +217,29 @@ def copyServiceFiles(serviceref, dest, name=None):
 	CopyFiles.copyFiles(moveList, name)
 	print "[MovieSelection] Copying in background..."
 
+# Appends possible destinations to the bookmarks object. Appends tuples
+# in the form (description, path) to it.
+def buildMovieLocationList(bookmarks):
+	inlist = []
+	for d in config.movielist.videodirs.value:
+		d = os.path.normpath(d)
+		bookmarks.append((d,d))
+		inlist.append(d)
+	for p in Components.Harddisk.harddiskmanager.getMountedPartitions():
+		d = os.path.normpath(p.mountpoint)
+		if d in inlist:
+			# improve shortcuts to mountpoints
+			try:
+				bookmarks[bookmarks.index((d,d))] = (p.tabbedDescription(), d)
+			except:
+				pass # When already listed as some "friendly" name
+		else:
+			bookmarks.append((p.tabbedDescription(), d))
+		inlist.append(d)
+	for d in last_selected_dest:
+		if d not in inlist:
+			bookmarks.append((d,d))
+
 class MovieBrowserConfiguration(ConfigListScreen,Screen):
 	skin = """
 <screen position="center,center" size="560,400" title="Movie Browser Configuration" >
@@ -255,18 +279,19 @@ class MovieBrowserConfiguration(ConfigListScreen,Screen):
 			getConfigListEntry(_("Root directory"), config.movielist.root),
 			getConfigListEntry(_("Hide known extensions"), config.movielist.hide_extensions),
 			]
-		for btn in ('red', 'green', 'yellow', 'blue', 'TV', 'Radio', 'Text'):
+		for btn in ('red', 'green', 'yellow', 'blue', 'TV', 'Radio', 'Text', 'F1', 'F2', 'F3'):
 			configList.append(getConfigListEntry(_(btn), userDefinedButtons[btn]))
 		ConfigListScreen.__init__(self, configList, session=session, on_change = self.changedEntry)
 		self["key_red"] = Button(_("Cancel"))
 		self["key_green"] = Button(_("Ok"))
-		self["setupActions"] = ActionMap(["SetupActions", "ColorActions"],
+		self["setupActions"] = ActionMap(["SetupActions", "ColorActions",  "MenuActions"],
 		{
 			"red": self.cancel,
 			"green": self.save,
 			"save": self.save,
 			"cancel": self.cancel,
 			"ok": self.save,
+			"menu": self.cancel,
 		}, -2)
 		self.onChangedEntry = []
 
@@ -299,9 +324,16 @@ class MovieBrowserConfiguration(ConfigListScreen,Screen):
 		self.close(True)
 
 	def cancel(self):
-		for x in self["config"].list:
-			x[1].cancel()
-		self.close(False)
+		if self["config"].isChanged():
+			self.session.openWithCallback(self.cancelCallback, MessageBox, _("Really close without saving settings?"))
+		else:
+			self.cancelCallback(True)
+
+	def cancelCallback(self, answer):
+		if answer:
+			for x in self["config"].list:
+				x[1].cancel()
+			self.close(False)
 
 class MovieContextMenuSummary(Screen):
 	def __init__(self, session, parent):
@@ -319,57 +351,79 @@ class MovieContextMenuSummary(Screen):
 
 	def selectionChanged(self):
 		item = self.parent["menu"].getCurrent()
-		self["selected"].text = item[0]
-
+		self["selected"].text = item[0][0]
 
 class MovieContextMenu(Screen):
 	# Contract: On OK returns a callable object (e.g. delete)
 	def __init__(self, session, csel, service):
 		Screen.__init__(self, session)
-
-		self["actions"] = ActionMap(["OkCancelActions", "ColorActions"],
+		self.csel = csel
+		self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "MenuActions"],
 			{
 				"ok": self.okbuttonClick,
 				"cancel": self.cancelClick,
-				"yellow": csel.showNetworkSetup,
-				"blue": csel.configure
+				"yellow": self.do_showNetworkSetup,
+				"menu": self.do_configure,
+				"2": self.do_rename,
+				"5": self.do_copy,
+				"6": self.do_move,
+				"7": self.do_createdir,
+				"8": self.do_delete
 			})
 
-		self["key_yellow"] = Button(_("Network") + "...")
-		self["key_blue"] = Button(_("Settings") + "...")
+		def append_to_menu(menu, args, key=""):
+			menu.append(ChoiceEntryComponent(key, args))
 
 		menu = []
 		if service:
 			if (service.flags & eServiceReference.mustDescent):
 				if isTrashFolder(service):
-					menu.append((_("Permanently remove all deleted items"), csel.purgeAll))
+					append_to_menu(menu, (_("Permanently remove all deleted items"), csel.purgeAll), key="8")
 				else:
-					menu.append((_("Delete"), csel.do_delete))
-					menu.append((_("Move"), csel.do_move))
-					menu.append((_("Rename"), csel.do_rename))
+					append_to_menu(menu, (_("Delete"), csel.do_delete), key="8")
+					append_to_menu(menu, (_("Move"), csel.do_move), key="6")
+					append_to_menu(menu, (_("Rename"), csel.do_rename), key="2")
 			else:
-				menu = [(_("Delete"), csel.do_delete),
-					(_("Move"), csel.do_move),
-					(_("Copy"), csel.do_copy),
-					(_("Reset playback position"), csel.do_reset),
-					(_("Rename"), csel.do_rename),
-					(_("Start offline decode"), csel.do_decode),
-					]
-				# Plugins expect a valid selection, so only include them if we selected a non-dir
-				menu.extend([(p.description, boundFunction(p, session, service)) for p in plugins.getPlugins(PluginDescriptor.WHERE_MOVIELIST)])
+				append_to_menu(menu, (_("Delete"), csel.do_delete), key="8")
+				append_to_menu(menu, (_("Move"), csel.do_move), key="6")
+				append_to_menu(menu, (_("Copy"), csel.do_copy), key="5")
+				append_to_menu(menu, (_("Reset playback position"), csel.do_reset))
+				append_to_menu(menu, (_("Rename"), csel.do_rename), key="2")
+				append_to_menu(menu, (_("Start offline decode"), csel.do_decode))
 
-		menu.append((_("Add bookmark"), csel.do_addbookmark))
-		menu.append((_("create directory"), csel.do_createdir))
-		menu.append((_("Sort by") + "...", csel.selectSortby))
-		menu.append((_("Network") + "...", csel.showNetworkSetup))
-		menu.append((_("Settings") + "...", csel.configure))
-		self["menu"] = MenuList(menu)
+				# Plugins expect a valid selection, so only include them if we selected a non-dir
+				for p in plugins.getPlugins(PluginDescriptor.WHERE_MOVIELIST):
+					append_to_menu( menu, (p.description, boundFunction(p, session, service)), key="bullet")
+		if csel.exist_bookmark():
+			append_to_menu(menu, (_("Remove bookmark"), csel.do_addbookmark))
+		else:
+			append_to_menu(menu, (_("Add bookmark"), csel.do_addbookmark))
+		append_to_menu(menu, (_("create directory"), csel.do_createdir), key="7")
+		append_to_menu(menu, (_("Sort by") + "...", csel.selectSortby))
+		append_to_menu(menu, (_("Network") + "...", csel.showNetworkSetup), key="yellow")
+		append_to_menu(menu, (_("Settings") + "...", csel.configure), key="menu")
+		self["menu"] = ChoiceList(menu)
 
 	def createSummary(self):
 		return MovieContextMenuSummary
 
 	def okbuttonClick(self):
-		self.close(self["menu"].getCurrent()[1])
+		self.close(self["menu"].getCurrent()[0][1])
+
+	def do_rename(self):
+		self.close(self.csel.do_rename())
+	def do_copy(self):
+		self.close(self.csel.do_copy())
+	def do_move(self):
+		self.close(self.csel.do_move())
+	def do_createdir(self):
+		self.close(self.csel.do_createdir())
+	def do_delete(self):
+		self.close(self.csel.do_delete())
+	def do_configure(self):
+		self.close(self.csel.configure())
+	def do_showNetworkSetup(self):
+		self.close(self.csel.showNetworkSetup())
 
 	def cancelClick(self):
 		self.close(None)
@@ -506,9 +560,9 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 		self["InfobarActions"] = HelpableActionMap(self, "InfobarActions",
 			{
 				"showMovies": (self.doPathSelect, _("Select the movie path")),
-				"showRadio": (self.btn_radio, "?"),
-				"showTv": (self.btn_tv, _("Home")),
-				"showText": (self.btn_text, _("On end of movie")),
+				"showRadio": (self.btn_radio, boundFunction(self.getinitUserDefinedActionsDescription, "btn_radio")),
+				"showTv": (self.btn_tv, boundFunction(self.getinitUserDefinedActionsDescription, "btn_tv")),
+				"showText": (self.btn_text, boundFunction(self.getinitUserDefinedActionsDescription, "btn_text")),
 			})
 
 		self["NumberActions"] =  NumberActionMap(["NumberActions", "InputAsciiActions"],
@@ -542,10 +596,16 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 
 		self["ColorActions"] = HelpableActionMap(self, "ColorActions",
 			{
-				"red": (self.btn_red, _("Delete...")),
-				"green": (self.btn_green, _("Move to other directory")),
-				"yellow": (self.btn_yellow, _("Select the movie path")),
-				"blue": (self.btn_blue, _("Show tag menu")),
+				"red": (self.btn_red, boundFunction(self.getinitUserDefinedActionsDescription, "btn_red")),
+				"green": (self.btn_green, boundFunction(self.getinitUserDefinedActionsDescription, "btn_green")),
+				"yellow": (self.btn_yellow, boundFunction(self.getinitUserDefinedActionsDescription, "btn_yellow")),
+				"blue": (self.btn_blue, boundFunction(self.getinitUserDefinedActionsDescription, "btn_blue")),
+			})
+		self["FunctionKeyActions"] = HelpableActionMap(self, "FunctionKeyActions",
+			{
+				"f1": (self.btn_F1, boundFunction(self.getinitUserDefinedActionsDescription, "btn_F1")),
+				"f2": (self.btn_F2, boundFunction(self.getinitUserDefinedActionsDescription, "btn_F2")),
+				"f3": (self.btn_F3, boundFunction(self.getinitUserDefinedActionsDescription, "btn_F3")),
 			})
 		self["OkCancelActions"] = HelpableActionMap(self, "OkCancelActions",
 			{
@@ -617,6 +677,12 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 			}
 			for p in plugins.getPlugins(PluginDescriptor.WHERE_MOVIELIST):
 				userDefinedActions['@' + p.name] = p.description
+			locations = []
+			buildMovieLocationList(locations)
+			prefix = _("Goto") + ": "
+			for d,p in locations:
+				if p and p.startswith('/'):
+					userDefinedActions[p] = prefix + d
 			config.movielist.btn_red = ConfigSelection(default='delete', choices=userDefinedActions)
 			config.movielist.btn_green = ConfigSelection(default='move', choices=userDefinedActions)
 			config.movielist.btn_yellow = ConfigSelection(default='bookmarks', choices=userDefinedActions)
@@ -624,6 +690,9 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 			config.movielist.btn_radio = ConfigSelection(default='tags', choices=userDefinedActions)
 			config.movielist.btn_tv = ConfigSelection(default='gohome', choices=userDefinedActions)
 			config.movielist.btn_text = ConfigSelection(default='movieoff', choices=userDefinedActions)
+			config.movielist.btn_F1 = ConfigSelection(default='movieoff_menu', choices=userDefinedActions)
+			config.movielist.btn_F2 = ConfigSelection(default='preview', choices=userDefinedActions)
+			config.movielist.btn_F3 = ConfigSelection(default='/media', choices=userDefinedActions)
 			userDefinedButtons ={
 				'red': config.movielist.btn_red,
 				'green': config.movielist.btn_green,
@@ -632,7 +701,13 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 				'Radio': config.movielist.btn_radio,
 				'TV': config.movielist.btn_tv,
 				'Text': config.movielist.btn_text,
+				'F1': config.movielist.btn_F1,
+				'F2': config.movielist.btn_F2,
+				'F3': config.movielist.btn_F3
 			}
+
+	def getinitUserDefinedActionsDescription(self, key):
+		return _(userDefinedActions.get(eval("config.movielist." + key + ".value"), _("Not Defined")))
 
 	def _callButton(self, name):
 		if name.startswith('@'):
@@ -642,13 +717,15 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 				for p in plugins.getPlugins(PluginDescriptor.WHERE_MOVIELIST):
 					if name == p.name:
 						p(self.session, item[0])
-			return
-		try:
-			a = getattr(self, 'do_' + name)
-		except Exception:
-			# Undefined action
-			return
-		a()
+		elif name.startswith('/'):
+			self.gotFilename(name)
+		else:
+			try:
+				a = getattr(self, 'do_' + name)
+			except Exception:
+				# Undefined action
+				return
+			a()
 
 	def btn_red(self):
 		self._callButton(config.movielist.btn_red.value)
@@ -664,6 +741,12 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 		self._callButton(config.movielist.btn_tv.value)
 	def btn_text(self):
 		self._callButton(config.movielist.btn_text.value)
+	def btn_F1(self):
+		self._callButton(config.movielist.btn_F1.value)
+	def btn_F2(self):
+		self._callButton(config.movielist.btn_F2.value)
+	def btn_F3(self):
+		self._callButton(config.movielist.btn_F3.value)
 
 	def keyUp(self):
 		if self["list"].getCurrentIndex() < 1:
@@ -809,6 +892,8 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 			action = userDefinedButtons[name].value
 			if action.startswith('@'):
 				check = self.can_default
+			elif action.startswith('/'):
+				check = self.can_gohome
 			else:
 				try:
 					check = getattr(self, 'can_' + action)
@@ -1304,7 +1389,7 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 
 	def showTagsMenu(self, tagele):
 		self.selected_tags_ele = tagele
-		lst = [(_("show all tags"), None)] + [(tag, self.getTagDescription(tag)) for tag in self.tags]
+		lst = [(_("show all tags"), None)] + [(tag, self.getTagDescription(tag)) for tag in sorted(self.tags)]
 		self.session.openWithCallback(self.tagChosen, ChoiceBox, title=_("Please select tag to filter..."), list = lst)
 
 	def showTagWarning(self):
@@ -1312,25 +1397,7 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 
 	def selectMovieLocation(self, title, callback):
 		bookmarks = [("("+_("Other")+"...)", None)]
-		inlist = []
-		for d in config.movielist.videodirs.value:
-			d = os.path.normpath(d)
-			bookmarks.append((d,d))
-			inlist.append(d)
-		for p in Components.Harddisk.harddiskmanager.getMountedPartitions():
-			d = os.path.normpath(p.mountpoint)
-			if d in inlist:
-				# improve shortcuts to mountpoints
-				try:
-					bookmarks[bookmarks.index((d,d))] = (p.tabbedDescription(), d)
-				except:
-					pass # When already listed as some "friendly" name
-			else:
-				bookmarks.append((p.tabbedDescription(), d))
-			inlist.append(d)
-		for d in last_selected_dest:
-			if d not in inlist:
-				bookmarks.append((d,d))
+		buildMovieLocationList(bookmarks)
 		self.onMovieSelected = callback
 		self.movieSelectTitle = title
 		self.session.openWithCallback(self.gotMovieLocation, ChoiceBox, title=title, list = bookmarks)
@@ -1371,6 +1438,11 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 
 	def can_addbookmark(self, item):
 		return True
+	def exist_bookmark(self):
+		path = config.movielist.last_videodir.value
+		if path in config.movielist.videodirs.value:
+			return True
+		return False
 	def do_addbookmark(self):
 		path = config.movielist.last_videodir.value
 		if path in config.movielist.videodirs.value:

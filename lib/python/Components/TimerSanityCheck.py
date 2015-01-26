@@ -1,7 +1,7 @@
 import NavigationInstance
 from time import localtime, mktime, gmtime
 from ServiceReference import ServiceReference
-from enigma import iServiceInformation, eServiceCenter, eServiceReference
+from enigma import iServiceInformation, eServiceCenter, eServiceReference, getBestPlayableServiceReference
 from timer import TimerEntry
 
 class TimerSanityCheck:
@@ -31,10 +31,10 @@ class TimerSanityCheck:
 		if self.newtimer is not None and self.newtimer.service_ref.ref.valid():
 			self.simultimer = [ self.newtimer ]
 			for timer in self.timerlist:
-				if (timer == self.newtimer):
+				if timer == self.newtimer:
 					return True
 				else:
-					if timer.begin == self.newtimer.begin:
+					if self.newtimer.begin >= timer.begin and self.newtimer.end <= timer.end:
 						fl1 = timer.service_ref.ref.flags & eServiceReference.isGroup
 						fl2 = self.newtimer.service_ref.ref.flags & eServiceReference.isGroup
 						if fl1 != fl2:
@@ -172,7 +172,10 @@ class TimerSanityCheck:
 				timer = self.timerlist[event[2]]
 			if event[1] == self.bflag:
 				tunerType = [ ]
-				fakeRecService = NavigationInstance.instance.recordService(timer.service_ref, True)
+				if timer.service_ref.ref and timer.service_ref.ref.flags & eServiceReference.isGroup:
+					fakeRecService = NavigationInstance.instance.recordService(getBestPlayableServiceReference(timer.service_ref.ref, eServiceReference()), True)
+				else:
+					fakeRecService = NavigationInstance.instance.recordService(timer.service_ref, True)
 				if fakeRecService:
 					fakeRecResult = fakeRecService.start(True)
 				else:

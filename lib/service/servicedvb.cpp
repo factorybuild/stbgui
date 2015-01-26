@@ -282,7 +282,7 @@ int eStaticServiceDVBBouquetInformation::isPlayable(const eServiceReference &ref
 		}
 		if (cur)
 		{
-			return cur;
+			return !!cur;
 		}
 		/* fallback to stream (or pvr) service alternative */
 		if (streamable_service)
@@ -880,11 +880,11 @@ RESULT eDVBServiceList::addService(eServiceReference &ref, eServiceReference bef
 	return m_bouquet->addService(ref, before);
 }
 
-RESULT eDVBServiceList::removeService(eServiceReference &ref)
+RESULT eDVBServiceList::removeService(eServiceReference &ref, bool renameBouquet)
 {
 	if (!m_bouquet)
 		return -1;
-	return m_bouquet->removeService(ref);
+	return m_bouquet->removeService(ref, renameBouquet);
 }
 
 RESULT eDVBServiceList::moveService(eServiceReference &ref, int pos)
@@ -1843,15 +1843,16 @@ RESULT eDVBServicePlay::getName(std::string &name)
 	}
 	else if (m_is_stream)
 	{
-		name = m_reference.name;
+		if (m_dvb_service)
+			m_dvb_service->getName(m_reference, name);
+		else
+			name = "unknown service";
 		if (name.empty())
-		{
-			name = m_reference.path;
-		}
-		if (name.empty())
-		{
-			name = "(...)";
-		}
+			name = m_reference.name;
+			if (name.empty())
+				name = m_reference.path;
+				if (name.empty())
+					name = "(...)";
 	}
 	else if (m_dvb_service)
 	{

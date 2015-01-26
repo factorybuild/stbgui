@@ -8,6 +8,7 @@
 #include <lib/base/eenv.h>
 #include <lib/base/eerror.h>
 #include <lib/base/estring.h>
+#include <lib/base/nconfig.h>
 #include <xmlccwrap/xmlccwrap.h>
 #include <dvbsi++/service_description_section.h>
 #include <dvbsi++/descriptor_tag.h>
@@ -34,13 +35,13 @@ RESULT eBouquet::addService(const eServiceReference &ref, eServiceReference befo
 	return 0;
 }
 
-RESULT eBouquet::removeService(const eServiceReference &ref)
+RESULT eBouquet::removeService(const eServiceReference &ref, bool renameBouquet)
 {
 	list::iterator it =
 		std::find(m_services.begin(), m_services.end(), ref);
 	if ( it == m_services.end() )
 		return -1;
-	if (ref.flags & eServiceReference::canDescent)
+	if (renameBouquet && (ref.flags & eServiceReference::canDescent))
 	{
 		std::string filename = ref.toString();
 		size_t pos = filename.find("FROM BOUQUET ");
@@ -197,16 +198,25 @@ bool eDVBService::isCrypted()
 int eDVBService::isPlayable(const eServiceReference &ref, const eServiceReference &ignore, bool simulate)
 {
 	ePtr<eDVBResourceManager> res_mgr;
-	if ( eDVBResourceManager::getInstance( res_mgr ) )
+	bool remote_fallback_enabled = eConfigManager::getConfigBoolValue("config.usage.remote_fallback_enabled", false);
+
+	if (eDVBResourceManager::getInstance(res_mgr))
 		eDebug("isPlayble... no res manager!!");
 	else
 	{
 		eDVBChannelID chid, chid_ignore;
 		int system;
+
 		((const eServiceReferenceDVB&)ref).getChannelID(chid);
 		((const eServiceReferenceDVB&)ignore).getChannelID(chid_ignore);
-		return res_mgr->canAllocateChannel(chid, chid_ignore, system, simulate);
+
+		if (res_mgr->canAllocateChannel(chid, chid_ignore, system, simulate))
+			return 1;
+
+		if (remote_fallback_enabled)
+			return 2;
 	}
+
 	return 0;
 }
 
@@ -215,58 +225,74 @@ int eDVBService::checkFilter(const eServiceReferenceDVB &ref, const eDVBChannelQ
 	int res = 0;
 	switch (query.m_type)
 	{
-	case eDVBChannelQuery::tName:
-		res = m_service_name_sort == query.m_string;
-		break;
-	case eDVBChannelQuery::tProvider:
-		if (query.m_string == "Unknown" && m_provider_name.empty())
-			res = 1;
-		else
-			res = m_provider_name == query.m_string;
-		break;
-	case eDVBChannelQuery::tType:
-	{
-		int service_type = ref.getServiceType();
-		if (query.m_int == 1) // TV Service
+		case eDVBChannelQuery::tName:
 		{
-			// Hack for dish network
-			int onid = ref.getOriginalNetworkID().get();
-			if (onid >= 0x1001 && onid <= 0x100b)
-			{
-				static int dish_tv_types[] = { 128, 133, 137, 140, 144, 145, 150, 154, 163, 164, 165, 166, 167, 168, 173, 174 };
-				static size_t dish_tv_num_types = sizeof(dish_tv_types) / sizeof(int);
-				if (std::binary_search(dish_tv_types, dish_tv_types + dish_tv_num_types, service_type))
-					return true;
-			}
+			res = m_service_name_sort == query.m_string;
+			break;
 		}
-		res = service_type == query.m_int;
-		break;
-	}
-	case eDVBChannelQuery::tBouquet:
-		res = 0;
-		break;
-	case eDVBChannelQuery::tSatellitePosition:
-		res = ((unsigned int)ref.getDVBNamespace().get())>>16 == (unsigned int)query.m_int;
-		break;
-	case eDVBChannelQuery::tFlags:
-		res = (m_flags & query.m_int) == query.m_int;
-		break;
-	case eDVBChannelQuery::tChannelID:
-	{
-		eDVBChannelID chid;
-		ref.getChannelID(chid);
-		res = chid == query.m_channelid;
-		break;
-	}
-	case eDVBChannelQuery::tAND:
-		res = checkFilter(ref, *query.m_p1) && checkFilter(ref, *query.m_p2);
-		break;
-	case eDVBChannelQuery::tOR:
-		res = checkFilter(ref, *query.m_p1) || checkFilter(ref, *query.m_p2);
-		break;
-	case eDVBChannelQuery::tAny:
-		res = 1;
-		break;
+		case eDVBChannelQuery::tProvider:
+		{
+			if (query.m_string == "Unknown" && m_provider_name.empty())
+				res = 1;
+			else
+				res = m_provider_name == query.m_string;
+			break;
+		}
+		case eDVBChannelQuery::tType:
+		{
+			int service_type = ref.getServiceType();
+			if (query.m_int == 1) // TV Service
+			{
+				// Hack for dish network
+				int onid = ref.getOriginalNetworkID().get();
+				if (onid >= 0x1001 && onid <= 0x100b)
+				{
+					static int dish_tv_types[] = { 128, 133, 137, 140, 144, 145, 150, 154, 163, 164, 165, 166, 167, 168, 173, 174 };
+					static size_t dish_tv_num_types = sizeof(dish_tv_types) / sizeof(int);
+					if (std::binary_search(dish_tv_types, dish_tv_types + dish_tv_num_types, service_type))
+						return true;
+				}
+			}
+			res = service_type == query.m_int;
+			break;
+		}
+		case eDVBChannelQuery::tBouquet:
+		{
+			res = 0;
+			break;
+		}
+		case eDVBChannelQuery::tSatellitePosition:
+		{
+			res = ((unsigned int)ref.getDVBNamespace().get())>>16 == (unsigned int)query.m_int;
+			break;
+		}
+		case eDVBChannelQuery::tFlags:
+		{
+			res = (m_flags & query.m_int) == query.m_int;
+			break;
+		}
+		case eDVBChannelQuery::tChannelID:
+		{
+			eDVBChannelID chid;
+			ref.getChannelID(chid);
+			res = chid == query.m_channelid;
+			break;
+		}
+		case eDVBChannelQuery::tAND:
+		{
+			res = checkFilter(ref, *query.m_p1) && checkFilter(ref, *query.m_p2);
+			break;
+		}
+		case eDVBChannelQuery::tOR:
+		{
+			res = checkFilter(ref, *query.m_p1) || checkFilter(ref, *query.m_p2);
+			break;
+		}
+		case eDVBChannelQuery::tAny:
+		{
+			res = 1;
+			break;
+		}
 	}
 
 	if (query.m_inverse)
@@ -718,7 +744,7 @@ void eDVBDB::loadBouquet(const char *path)
 		extension = ".tv";
 	if (!strcmp(path, "bouquets.radio"))
 		extension = ".radio";
-	if (extension.length())
+	if (m_load_unlinked_userbouquets && extension.length())
 	{
 		std::string p = eEnv::resolve("${sysconfdir}/enigma2/");
 		DIR *dir = opendir(p.c_str());
@@ -891,7 +917,10 @@ void eDVBDB::loadBouquet(const char *path)
 				snprintf(buf, sizeof(buf), "1:7:2:0:0:0:0:0:0:0:FROM BOUQUET \"%s\" ORDER BY bouquet", userbouquetsfiles[i].c_str());
 			eServiceReference tmp(buf);
 			loadBouquet(userbouquetsfiles[i].c_str());
-			list.push_front(tmp);
+			if (!strcmp(userbouquetsfiles[i].c_str(), "userbouquet.LastScanned.tv"))
+				list.push_back(tmp);
+			else
+				list.push_front(tmp);
 			++entries;
 		}
 		bouquet.flushChanges();
@@ -993,7 +1022,7 @@ eDVBDB *eDVBDB::instance;
 using namespace xmlcc;
 
 eDVBDB::eDVBDB()
-	: m_numbering_mode(false)
+	: m_numbering_mode(false), m_load_unlinked_userbouquets(true)
 {
 	instance = this;
 	reloadServicelist();

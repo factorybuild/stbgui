@@ -12,7 +12,7 @@ from Components.Sources.Boolean import Boolean
 from Components.SystemInfo import SystemInfo
 from Components.VolumeControl import VolumeControl
 
-from enigma import iPlayableService, eTimer
+from enigma import iPlayableService, eTimer, eSize
 
 from Tools.ISO639 import LanguageCodes
 from Tools.BoundFunction import boundFunction
@@ -95,7 +95,7 @@ class AudioSelection(Screen, ConfigListScreen):
 			if SystemInfo["CanDownmixAC3"]:
 				self.settings.downmix = ConfigOnOff(default=config.av.downmix_ac3.value)
 				self.settings.downmix.addNotifier(self.changeAC3Downmix, initial_call = False)
-				conflist.append(getConfigListEntry(_("AC3/DTS downmix"), self.settings.downmix))
+				conflist.append(getConfigListEntry(_("Multi channel downmix"), self.settings.downmix))
 				self["key_red"].setBoolean(True)
 
 			if n > 0:
@@ -256,11 +256,14 @@ class AudioSelection(Screen, ConfigListScreen):
 			self.infobar.enableSubtitle(subtitle)
 
 	def changeAC3Downmix(self, downmix):
-		if downmix.getValue() == True:
-			config.av.downmix_ac3.value = True
-		else:
-			config.av.downmix_ac3.value = False
+		config.av.downmix_ac3.value = downmix.getValue() == True
 		config.av.downmix_ac3.save()
+		if SystemInfo["CanDownmixDTS"]:
+			config.av.downmix_dts.value = config.av.downmix_ac3.value
+			config.av.downmix_dts.save()
+		if SystemInfo["CanDownmixAAC"]:
+			config.av.downmix_aac.value = config.av.downmix_ac3.value
+			config.av.downmix_aac.save()
 
 	def changeMode(self, mode):
 		if mode is not None and self.audioChannel:
@@ -387,9 +390,9 @@ class SubtitleSelection(AudioSelection):
 
 class QuickSubtitlesConfigMenu(ConfigListScreen, Screen):
 	skin = """
-	<screen position="50,50" size="480,255" title="Subtitle settings" backgroundColor="#7f000000" flags="wfNoBorder">
-		<widget name="config" position="5,5" size="470,225" font="Regular;18" zPosition="1" transparent="1" selectionPixmap="PLi-HD/buttons/sel.png" valign="center" />
-		<widget name="videofps" position="5,230" size="470,20" backgroundColor="secondBG" transparent="1" zPosition="1" font="Regular;16" valign="center" halign="left" foregroundColor="blue"/>
+	<screen position="50,50" size="480,280" title="Subtitle settings" backgroundColor="#7f000000" flags="wfNoBorder">
+		<widget name="config" position="5,5" size="470,250" font="Regular;18" zPosition="1" transparent="1" selectionPixmap="PLi-HD/buttons/sel.png" valign="center" />
+		<widget name="videofps" position="5,255" size="470,20" backgroundColor="secondBG" transparent="1" zPosition="1" font="Regular;16" valign="center" halign="left" foregroundColor="blue"/>
 	</screen>"""
 
 	def __init__(self, session, infobar):
@@ -429,6 +432,8 @@ class QuickSubtitlesConfigMenu(ConfigListScreen, Screen):
 			menu = [
 				getConfigMenuItem("config.subtitles.pango_subtitles_delay"),
 				getConfigMenuItem("config.subtitles.pango_subtitle_colors"),
+				getConfigMenuItem("config.subtitles.pango_subtitle_fontswitch"),
+				getConfigMenuItem("config.subtitles.colourise_dialogs"),
 				getConfigMenuItem("config.subtitles.subtitle_fontsize"),
 				getConfigMenuItem("config.subtitles.subtitle_position"),
 				getConfigMenuItem("config.subtitles.subtitle_alignment"),
@@ -445,6 +450,12 @@ class QuickSubtitlesConfigMenu(ConfigListScreen, Screen):
 			"cancel": self.cancel,
 			"ok": self.ok,
 		},-2)
+
+		self.onLayoutFinish.append(self.layoutFinished)
+
+	def layoutFinished(self):
+		if not self["videofps"].text:
+			self.instance.resize(eSize(self.instance.size().width(), self["config"].l.getItemSize().height()*len(self["config"].getList()) + 10))
 
 	def changedEntry(self):
 		if self["config"].getCurrent() in [getConfigMenuItem("config.subtitles.pango_subtitles_delay"),getConfigMenuItem("config.subtitles.pango_subtitles_fps")]:
