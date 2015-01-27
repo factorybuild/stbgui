@@ -172,7 +172,7 @@ eDBoxLCD::eDBoxLCD()
 			is_oled = 3;
 		}
 	}
-/*#endif*/
+#endif
 	instance=this;
 
 	setSize(xres, yres, bpp);
