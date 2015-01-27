@@ -66,8 +66,62 @@ eDBoxLCD::eDBoxLCD()
 	flipped = false;
 	inverted = 0;
 	is_oled = 0;
-/*#ifndef NO_LCD*/
-	lcdfd = open("/dev/dbox/oled0", O_RDWR);
+	FILE *boxtype_file;
+	char boxtype_name[20];
+	FILE *fp_file;
+	char fp_version[20];
+
+#ifndef NO_LCD
+	if((boxtype_file = fopen("/proc/stb/info/boxtype", "r")) != NULL)
+	{
+		fgets(boxtype_name, sizeof(boxtype_name), boxtype_file);
+		fclose(boxtype_file);
+		
+		if((strcmp(boxtype_name, "xp1000s\n") == 0) || (strcmp(boxtype_name, "odinm7\n") == 0) || (strcmp(boxtype_name, "ew7358\n") == 0) || (strcmp(boxtype_name, "ew7362\n") == 0) || (strcmp(boxtype_name, "formuler3\n") == 0) || (strcmp(boxtype_name, "hd1100\n") == 0) || (strcmp(boxtype_name, "vp7358ci\n") == 0) || (strcmp(boxtype_name, "vg2000\n") == 0) || (strcmp(boxtype_name, "vg5000\n") == 0) || (strcmp(boxtype_name, "sh1\n") == 0))
+		{
+			lcdfd = open("/dev/null", O_RDWR);
+		}
+		else if((strcmp(boxtype_name, "ini-1000de\n") == 0) || (strcmp(boxtype_name, "ini-2000am\n") == 0))
+		{
+				if((fp_file = fopen("/proc/stb/fp/version", "r")) != NULL)
+				{
+					fgets(fp_version, sizeof(fp_version), fp_file);
+					fclose(fp_file);
+				}
+				if(strcmp(fp_version, "0\n") == 0) 
+				{
+					lcdfd = open("/dev/null", O_RDWR);
+				}
+				else
+				{
+					lcdfd = open("/dev/dbox/oled0", O_RDWR);
+				}
+		}
+		else if((strcmp(boxtype_name, "spark\n") == 0))
+		{
+				if((fp_file = fopen("/proc/stb/fp/version", "r")) != NULL)
+				{
+					fgets(fp_version, sizeof(fp_version), fp_file);
+					fclose(fp_file);
+				}
+				if(strcmp(fp_version, "4\n") == 0)
+				{
+					lcdfd = open("/dev/null", O_RDWR);
+				}
+				else
+				{
+					lcdfd = open("/dev/dbox/oled0", O_RDWR);
+				}
+		}		
+		else
+		{
+			lcdfd = open("/dev/dbox/oled0", O_RDWR);
+		}		
+	}	
+	else
+	{
+		lcdfd = open("/dev/dbox/oled0", O_RDWR);
+	}
 	if (lcdfd < 0)
 	{
 		if (!access("/proc/stb/lcd/oled_brightness", W_OK) ||
