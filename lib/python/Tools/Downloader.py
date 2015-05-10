@@ -47,7 +47,13 @@ class downloadWithProgress:
 			port = uri.port
 			path = uri.path
 		self.factory = HTTPProgressDownloader(url, outputfile, *args, **kwargs)
-		self.connection = reactor.connectTCP(host, port, self.factory)
+		if scheme == 'https':
+			from twisted.internet import ssl
+			if contextFactory is None:
+				contextFactory = ssl.ClientContextFactory()
+			self.connection = reactor.connectSSL(host, port, self.factory, contextFactory)
+		else:
+			self.connection = reactor.connectTCP(host, port, self.factory)
 
 	def start(self):
 		return self.factory.deferred

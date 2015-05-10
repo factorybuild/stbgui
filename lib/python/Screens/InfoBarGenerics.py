@@ -1049,7 +1049,7 @@ class InfoBarEPG:
 	def showEventInfoPlugins(self):
 		pluginlist = self.getEPGPluginList()
 		if pluginlist:
-			self.session.openWithCallback(self.EventInfoPluginChosen, ChoiceBox, title=_("Please choose an extension..."), list = pluginlist, skin_name = "EPGExtensionsList")
+			self.session.openWithCallback(self.EventInfoPluginChosen, ChoiceBox, title=_("Please choose an extension..."), list=pluginlist, skin_name="EPGExtensionsList", reorderConfig="eventinfo_order")
 		else:
 			self.openSingleServiceEPG()
 
@@ -1695,9 +1695,12 @@ class InfoBarTimeshift:
 		self.ts_rewind_timer.callback.append(self.rewindService)
 		self.ts_start_delay_timer = eTimer()
 		self.ts_start_delay_timer.callback.append(self.startTimeshiftWithoutPause)
+		self.ts_current_event_timer = eTimer()
+		self.ts_current_event_timer.callback.append(self.saveTimeshiftFileForEvent)
 		self.save_timeshift_file = False
 		self.timeshift_was_activated = False
 		self.showTimeshiftState = False
+		self.save_timeshift_only_current_event = False
 
 		self.__event_tracker = ServiceEventTracker(screen=self, eventmap=
 			{
@@ -1749,6 +1752,7 @@ class InfoBarTimeshift:
 				# get current timeshift filename and calculate new
 				self.save_timeshift_file = False
 				self.save_timeshift_in_movie_dir = False
+				self.setCurrentEventTimer()
 				self.current_timeshift_filename = ts.getTimeshiftFilename()
 				self.new_timeshift_filename = self.generateNewTimeshiftFileName()
 			else:
@@ -1772,7 +1776,7 @@ class InfoBarTimeshift:
 		if answer and ts:
 			ts.stopTimeshift()
 			self.pvrStateDialog.hide()
-
+			self.setCurrentEventTimer()
 			# disable actions
 			self.__seekableStatusChanged()
 
@@ -1858,10 +1862,14 @@ class InfoBarTimeshift:
 		if self.timeshiftEnabled() and config.usage.check_timeshift.value and self.timeshift_was_activated:
 			message = _("Stop timeshift?")
 			if not self.save_timeshift_file:
-				choice = [(_("yes"), "stop"), (_("no"), "continue"), (_("Yes and save"), "save"), (_("Yes and save in movie dir"), "save_movie")]
+				choice = [(_("Yes"), "stop"), (_("No"), "continue"), (_("Yes and save"), "save"), (_("Yes and save in movie dir"), "save_movie")]
 			else:
-				choice = [(_("yes"), "stop"), (_("no"), "continue")]
+				choice = [(_("Yes"), "stop"), (_("No"), "continue")]
 				message += "\n" + _("Reminder, you have chosen to save timeshift file.")
+				if self.save_timeshift_only_current_event:
+					remaining = self.currentEventTime()
+					if remaining > 0:
+						message += "\n" + _("The %d min remaining before the end of the event.") % abs(remaining / 60)
 			self.session.openWithCallback(boundFunction(self.checkTimeshiftRunningCallback, returnFunction), MessageBox, message, simple = True, list = choice)
 		else:
 			returnFunction(True)
@@ -1883,6 +1891,7 @@ class InfoBarTimeshift:
 	# renames/moves timeshift files if requested
 	def __serviceEnd(self):
 		self.saveTimeshiftFiles()
+		self.setCurrentEventTimer()
 		self.timeshift_was_activated = False
 
 	def saveTimeshiftFiles(self):
@@ -1902,6 +1911,49 @@ class InfoBarTimeshift:
 
 			moveFiles(fileList)
 			self.save_timeshift_file = False
+			self.setCurrentEventTimer()
+
+	def currentEventTime(self):
+		remaining = 0
+		ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+		if ref:
+			epg = eEPGCache.getInstance()
+			event = epg.lookupEventTime(ref, -1, 0)
+			if event:
+				now = int(time())
+				start = event.getBeginTime()
+				duration = event.getDuration()
+				end = start + duration
+				remaining = end - now
+		return remaining
+
+	def saveTimeshiftFileForEvent(self):
+		if self.timeshiftEnabled() and self.save_timeshift_only_current_event and self.timeshift_was_activated and self.save_timeshift_file:
+			message = _("Current event is over.\nSelect an option to save the timeshift file.")
+			choice = [(_("Save and stop timeshift"), "save"), (_("Save and restart timeshift"), "restart"), (_("Don't save and stop timeshift"), "stop"), (_("Do nothing"), "continue")]
+			self.session.openWithCallback(self.saveTimeshiftFileForEventCallback, MessageBox, message, simple = True, list = choice, timeout=15)
+
+	def saveTimeshiftFileForEventCallback(self, answer):
+		self.save_timeshift_only_current_event = False
+		if answer:
+			ts = self.getTimeshift()
+			if ts and answer in ("save", "restart", "stop"):
+				self.stopTimeshiftcheckTimeshiftRunningCallback(True)
+				if answer in ("save", "restart"):
+					ts.saveTimeshiftFile()
+					del ts
+					self.saveTimeshiftFiles()
+				if answer == "restart":
+					self.ts_start_delay_timer.start(1000, True)
+				self.save_timeshift_file = False
+				self.save_timeshift_in_movie_dir = False
+
+	def setCurrentEventTimer(self, duration=0):
+		self.ts_current_event_timer.stop()
+		self.save_timeshift_only_current_event = False
+		if duration > 0:
+			self.save_timeshift_only_current_event = True
+			self.ts_current_event_timer.startLongTimer(duration)
 
 from Screens.PiPSetup import PiPSetup
 
@@ -1965,7 +2017,7 @@ class InfoBarExtensions:
 		list.extend([(x[0](), x) for x in extensionsList])
 
 		keys += [""] * len(extensionsList)
-		self.session.openWithCallback(self.extensionCallback, ChoiceBox, title=_("Please choose an extension..."), list = list, keys = keys, skin_name = "ExtensionsList")
+		self.session.openWithCallback(self.extensionCallback, ChoiceBox, title=_("Please choose an extension..."), list=list, keys=keys, skin_name="ExtensionsList", reorderConfig="extension_order")
 
 	def extensionCallback(self, answer):
 		if answer is not None:
@@ -2180,10 +2232,43 @@ class InfoBarInstantRecord:
 			if InfoBarInstance:
 				self.recording = InfoBarInstance.recording
 
+	def moveToTrash(self, entry):
+		print "instantRecord stop and delete recording: ", entry.name
+		import Tools.Trashcan
+		trash = Tools.Trashcan.createTrashFolder(entry.Filename)
+		from MovieSelection import moveServiceFiles
+		moveServiceFiles(entry.Filename, trash, entry.name, allowCopy=False)
+
 	def stopCurrentRecording(self, entry = -1):
+		def confirm(answer=False):
+			if answer:
+				self.session.nav.RecordTimer.removeEntry(self.recording[entry])
+				if self.deleteRecording:
+					self.moveToTrash(self.recording[entry])
+				self.recording.remove(self.recording[entry])
 		if entry is not None and entry != -1:
-			self.session.nav.RecordTimer.removeEntry(self.recording[entry])
-			self.recording.remove(self.recording[entry])
+			msg =  _("Stop recording:")
+			if self.deleteRecording:
+				msg = _("Stop and delete recording:")
+			msg += "\n"
+			msg += " - " + self.recording[entry].name + "\n"
+			self.session.openWithCallback(confirm, MessageBox, msg, MessageBox.TYPE_YESNO)
+
+	def stopAllCurrentRecordings(self, list):
+		def confirm(answer=False):
+			if answer:
+				for entry in list:
+					self.session.nav.RecordTimer.removeEntry(entry[0])
+					self.recording.remove(entry[0])
+					if self.deleteRecording:
+						self.moveToTrash(entry[0])
+		msg =  _("Stop recordings:")
+		if self.deleteRecording:
+			msg = _("Stop and delete recordings:")
+		msg += "\n"
+		for entry in list:
+			msg += " - " + entry[0].name + "\n"
+		self.session.openWithCallback(confirm, MessageBox, msg, MessageBox.TYPE_YESNO)
 
 	def getProgramInfoAndEvent(self, info, name):
 		info["serviceref"] = hasattr(self, "SelectedInstantServiceRef") and self.SelectedInstantServiceRef or self.session.nav.getCurrentlyPlayingServiceOrGroup()
@@ -2285,11 +2370,17 @@ class InfoBarInstantRecord:
 			elif x.dontSave and x.isRunning():
 				list.append((x, False))
 
+		self.deleteRecording = False
 		if answer[1] == "changeduration":
 			if len(self.recording) == 1:
 				self.changeDuration(0)
 			else:
 				self.session.openWithCallback(self.changeDuration, TimerSelection, list)
+		elif answer[1] == "addrecordingtime":
+			if len(self.recording) == 1:
+				self.addRecordingTime(0)
+			else:
+				self.session.openWithCallback(self.addRecordingTime, TimerSelection, list)
 		elif answer[1] == "changeendtime":
 			if len(self.recording) == 1:
 				self.setEndtime(0)
@@ -2299,7 +2390,21 @@ class InfoBarInstantRecord:
 			import TimerEdit
 			self.session.open(TimerEdit.TimerEditList)
 		elif answer[1] == "stop":
-			self.session.openWithCallback(self.stopCurrentRecording, TimerSelection, list)
+			if len(self.recording) == 1:
+				self.stopCurrentRecording(0)
+			else:
+				self.session.openWithCallback(self.stopCurrentRecording, TimerSelection, list)
+		elif answer[1] == "stopdelete":
+			self.deleteRecording = True
+			if len(self.recording) == 1:
+				self.stopCurrentRecording(0)
+			else:
+				self.session.openWithCallback(self.stopCurrentRecording, TimerSelection, list)
+		elif answer[1] == "stopall":
+			self.stopAllCurrentRecordings(list)
+		elif answer[1] == "stopdeleteall":
+			self.deleteRecording = True
+			self.stopAllCurrentRecordings(list)
 		elif answer[1] in ( "indefinitely" , "manualduration", "manualendtime", "event"):
 			self.startInstantRecording(limitEvent = answer[1] in ("event", "manualendtime") or False)
 			if answer[1] == "manualduration":
@@ -2313,6 +2418,10 @@ class InfoBarInstantRecord:
 				self.save_timeshift_file = True
 				if "movie" in answer[1]:
 					self.save_timeshift_in_movie_dir = True
+				if "event" in answer[1]:
+					remaining = self.currentEventTime()
+					if remaining > 0:
+						self.setCurrentEventTimer(remaining-15)
 		print "after:\n", self.recording
 
 	def setEndtime(self, entry):
@@ -2336,8 +2445,22 @@ class InfoBarInstantRecord:
 			self.selectedEntry = entry
 			self.session.openWithCallback(self.inputCallback, InputBox, title=_("How many minutes do you want to record?"), text="5", maxSize=False, type=Input.NUMBER)
 
+	def addRecordingTime(self, entry):
+		if entry is not None and entry >= 0:
+			self.selectedEntry = entry
+			self.session.openWithCallback(self.inputAddRecordingTime, InputBox, title=_("How many minutes do you want add to record?"), text="5", maxSize=False, type=Input.NUMBER)
+
+	def inputAddRecordingTime(self, value):
+		if value:
+			print "added", int(value), "minutes for recording."
+			entry = self.recording[self.selectedEntry]
+			if int(value) != 0:
+				entry.autoincrease = False
+			entry.end += 60 * int(value)
+			self.session.nav.RecordTimer.timeChanged(entry)
+
 	def inputCallback(self, value):
-		if value is not None:
+		if value:
 			print "stopping recording after", int(value), "minutes."
 			entry = self.recording[self.selectedEntry]
 			if int(value) != 0:
@@ -2375,9 +2498,17 @@ class InfoBarInstantRecord:
 			common = ()
 		if self.isInstantRecordRunning():
 			title =_("A recording is currently running.\nWhat do you want to do?")
-			list = ((_("Stop recording"), "stop"),) + common + \
+			list = common + \
 				((_("Change recording (duration)"), "changeduration"),
+				(_("Change recording (add time)"), "addrecordingtime"),
 				(_("Change recording (endtime)"), "changeendtime"),)
+			list += ((_("Stop recording"), "stop"),)
+			if config.usage.movielist_trashcan.value:
+				list += ((_("Stop and delete recording"), "stopdelete"),)
+			if len(self.recording) > 1:
+				list += ((_("Stop all current recordings"), "stopall"),)
+				if config.usage.movielist_trashcan.value:
+					list += ((_("Stop and delete all current recordings"), "stopdeleteall"),)
 			if self.isTimerRecordRunning():
 				list += ((_("Stop timer recording"), "timer"),)
 			list += ((_("Do nothing"), "no"),)
@@ -2391,6 +2522,8 @@ class InfoBarInstantRecord:
 		if isStandardInfoBar(self) and self.timeshiftEnabled():
 			list = list + ((_("Save timeshift file"), "timeshift"),
 				(_("Save timeshift file in movie directory"), "timeshift_movie"))
+			if self.currentEventTime() > 0:
+				list += ((_("Save timeshift only for current event"), "timeshift_event"),)
 		if list:
 			self.session.openWithCallback(self.recordQuestionCallback, ChoiceBox, title=title, list=list)
 		else:
@@ -3122,7 +3255,10 @@ class InfoBarPowersaver:
 				curtime = (curtime.tm_hour, curtime.tm_min, curtime.tm_sec)
 				begintime = tuple(config.usage.inactivity_timer_blocktime_begin.value)
 				endtime = tuple(config.usage.inactivity_timer_blocktime_end.value)
-				if begintime <= endtime and (curtime >= begintime and curtime < endtime) or begintime > endtime and (curtime >= begintime or curtime < endtime):
+				begintime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_begin.value)
+				endtime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_end.value)
+				if begintime <= endtime and (curtime >= begintime and curtime < endtime) or begintime > endtime and (curtime >= begintime or curtime < endtime) or config.usage.inactivity_timer_blocktime_extra.value and\
+				(begintime_extra <= endtime_extra and (curtime >= begintime_extra and curtime < endtime_extra) or begintime_extra > endtime_extra and (curtime >= begintime_extra or curtime < endtime_extra)):
 					duration = (endtime[0]*3600 + endtime[1]*60) - (curtime[0]*3600 + curtime[1]*60 + curtime[2])
 					if duration:
 						if duration < 0:
@@ -3181,12 +3317,6 @@ class InfoBarPowersaver:
 			self.session.open(Screens.Standby.Standby)
 
 class InfoBarHDMI:
-	def __init__(self):
-		self["HDMIActions"] = HelpableActionMap(self, "InfobarHDMIActions",
-			{
-				"HDMIin":(self.HDMIIn, _("Switch to HDMI in mode")),
-			}, prio=2)
-
 	def HDMIIn(self):
 		slist = self.servicelist
 		if slist.dopipzap:

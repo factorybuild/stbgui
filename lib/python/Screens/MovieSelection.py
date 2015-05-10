@@ -3,7 +3,7 @@ from Components.Button import Button
 from Components.ActionMap import HelpableActionMap, ActionMap, NumberActionMap
 from Components.ChoiceList import ChoiceList, ChoiceEntryComponent
 from Components.MenuList import MenuList
-from Components.MovieList import MovieList, resetMoviePlayState, AUDIO_EXTENSIONS, DVD_EXTENSIONS, IMAGE_EXTENSIONS
+from Components.MovieList import MovieList, resetMoviePlayState, AUDIO_EXTENSIONS, DVD_EXTENSIONS, IMAGE_EXTENSIONS, moviePlayState
 from Components.DiskInfo import DiskInfo
 from Components.Pixmap import Pixmap, MultiPixmap
 from Components.Label import Label
@@ -22,6 +22,7 @@ from Screens.MessageBox import MessageBox
 from Screens.ChoiceBox import ChoiceBox
 from Screens.LocationBox import MovieLocationBox
 from Screens.HelpMenu import HelpableScreen
+from Screens.InputBox import PinInput
 import Screens.InfoBar
 
 from Tools import NumericalTextInput
@@ -138,14 +139,14 @@ def canCopy(item):
 
 def createMoveList(serviceref, dest):
 	#normpath is to remove the trailing '/' from directories
-	src = os.path.normpath(serviceref.getPath())
+	src = isinstance(serviceref, str) and serviceref + ".ts" or os.path.normpath(serviceref.getPath())
 	srcPath, srcName = os.path.split(src)
 	if os.path.normpath(srcPath) == dest:
 		# move file to itself is allowed, so we have to check it
 		raise Exception, "Refusing to move to the same directory"
 	# Make a list of items to move
 	moveList = [(src, os.path.join(dest, srcName))]
-	if not serviceref.flags & eServiceReference.mustDescent:
+	if isinstance(serviceref, str) or not serviceref.flags & eServiceReference.mustDescent:
 		# Real movie, add extra files...
 		srcBase = os.path.splitext(src)[0]
 		baseName = os.path.split(srcBase)[1]
@@ -353,11 +354,15 @@ class MovieContextMenuSummary(Screen):
 		item = self.parent["menu"].getCurrent()
 		self["selected"].text = item[0][0]
 
-class MovieContextMenu(Screen):
+from Screens.ParentalControlSetup import ProtectedScreen
+
+class MovieContextMenu(Screen, ProtectedScreen):
 	# Contract: On OK returns a callable object (e.g. delete)
 	def __init__(self, session, csel, service):
 		Screen.__init__(self, session)
 		self.csel = csel
+		ProtectedScreen.__init__(self)
+
 		self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "NumberActions", "MenuActions"],
 			{
 				"ok": self.okbuttonClick,
@@ -376,24 +381,26 @@ class MovieContextMenu(Screen):
 
 		menu = []
 		if service:
-			if (service.flags & eServiceReference.mustDescent):
-				if isTrashFolder(service):
-					append_to_menu(menu, (_("Permanently remove all deleted items"), csel.purgeAll), key="8")
-				else:
-					append_to_menu(menu, (_("Delete"), csel.do_delete), key="8")
-					append_to_menu(menu, (_("Move"), csel.do_move), key="6")
-					append_to_menu(menu, (_("Rename"), csel.do_rename), key="2")
+			if (service.flags & eServiceReference.mustDescent) and isTrashFolder(service):
+				append_to_menu(menu, (_("Permanently remove all deleted items"), csel.purgeAll), key="8")
 			else:
 				append_to_menu(menu, (_("Delete"), csel.do_delete), key="8")
 				append_to_menu(menu, (_("Move"), csel.do_move), key="6")
-				append_to_menu(menu, (_("Copy"), csel.do_copy), key="5")
-				append_to_menu(menu, (_("Reset playback position"), csel.do_reset))
 				append_to_menu(menu, (_("Rename"), csel.do_rename), key="2")
-				append_to_menu(menu, (_("Start offline decode"), csel.do_decode))
-
+				if not (service.flags & eServiceReference.mustDescent):
+					append_to_menu(menu, (_("Copy"), csel.do_copy), key="5")
+					if self.isResetable():
+						append_to_menu(menu, (_("Reset playback position"), csel.do_reset))
+					if service.getPath().endswith('.ts'):
+						append_to_menu(menu, (_("Start offline decode"), csel.do_decode))
+				if config.ParentalControl.hideBlacklist.value and config.ParentalControl.storeservicepin.value != "never":
+					from Components.ParentalControl import parentalControl
+					if not parentalControl.sessionPinCached:
+						append_to_menu(menu, (_("Unhide parental control services"), csel.unhideParentalServices))
 				# Plugins expect a valid selection, so only include them if we selected a non-dir
-				for p in plugins.getPlugins(PluginDescriptor.WHERE_MOVIELIST):
-					append_to_menu( menu, (p.description, boundFunction(p, session, service)), key="bullet")
+				if not(service.flags & eServiceReference.mustDescent):
+					for p in plugins.getPlugins(PluginDescriptor.WHERE_MOVIELIST):
+						append_to_menu( menu, (p.description, boundFunction(p, session, service)), key="bullet")
 		if csel.exist_bookmark():
 			append_to_menu(menu, (_("Remove bookmark"), csel.do_addbookmark))
 		else:
@@ -402,7 +409,20 @@ class MovieContextMenu(Screen):
 		append_to_menu(menu, (_("Sort by") + "...", csel.selectSortby))
 		append_to_menu(menu, (_("Network") + "...", csel.showNetworkSetup), key="yellow")
 		append_to_menu(menu, (_("Settings") + "...", csel.configure), key="menu")
+
 		self["menu"] = ChoiceList(menu)
+
+	def isProtected(self):
+		return self.csel.protectContextMenu and config.ParentalControl.setuppinactive.value and config.ParentalControl.config_sections.context_menus.value
+
+	def isResetable(self):
+		item = self.csel.getCurrentSelection()
+		return not(item[1] and moviePlayState(item[0].getPath() + ".cuts", item[0], item[1].getLength(item[0])) is None)
+
+	def pinEntered(self, answer):
+		if answer:
+			self.csel.protectContextMenu = False
+		ProtectedScreen.pinEntered(self, answer)
 
 	def createSummary(self):
 		return MovieContextMenuSummary
@@ -481,7 +501,7 @@ class MovieSelectionSummary(Screen):
 		else:
 			self["name"].text = ""
 
-class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
+class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase, ProtectedScreen):
 	# SUSPEND_PAUSES actually means "please call my pauseService()"
 	ALLOW_SUSPEND = Screen.SUSPEND_PAUSES
 
@@ -490,6 +510,9 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 		HelpableScreen.__init__(self)
 		if not timeshiftEnabled:
 			InfoBarBase.__init__(self) # For ServiceEventTracker
+		ProtectedScreen.__init__(self)
+		self.protectContextMenu = True
+
 		self.initUserDefinedActions()
 		self.tags = {}
 		if selectedmovie:
@@ -515,6 +538,10 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 		self["DescriptionBorder"] = Pixmap()
 		self["DescriptionBorder"].hide()
 
+		if config.ParentalControl.servicepinactive.value:
+			from Components.ParentalControl import parentalControl
+			if not parentalControl.sessionPinCached and config.movielist.last_videodir.value and [x for x in config.movielist.last_videodir.value[1:].split("/") if x.startswith(".") and not x.startswith(".Trash")]:
+				config.movielist.last_videodir.value = ""
 		if not os.path.isdir(config.movielist.last_videodir.value):
 			config.movielist.last_videodir.value = defaultMoviePath()
 			config.movielist.last_videodir.save()
@@ -646,6 +673,28 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 				#iPlayableService.evSOF: self.__evSOF,
 			})
 		self.onExecBegin.append(self.asciiOn)
+		config.misc.standbyCounter.addNotifier(self.standbyCountChanged, initial_call=False)
+
+	def isProtected(self):
+		return config.ParentalControl.setuppinactive.value and config.ParentalControl.config_sections.movie_list.value
+
+	def standbyCountChanged(self, value):
+		self.close(None)
+
+	def unhideParentalServices(self):
+		if self.protectContextMenu:
+			self.session.openWithCallback(self.unhideParentalServicesCallback, PinInput, pinList=[config.ParentalControl.servicepin[0].value], triesEntry=config.ParentalControl.retries.servicepin, title=_("Enter the service pin"), windowTitle=_("Enter pin code"))
+		else:
+			self.unhideParentalServicesCallback(True)
+
+	def unhideParentalServicesCallback(self, answer):
+		if answer:
+			from Components.ParentalControl import parentalControl
+			parentalControl.setSessionPinCached()
+			parentalControl.hideBlacklist()
+			self.reloadList()
+		elif answer is not None:
+			self.session.openWithCallback(self.close, MessageBox, _("The pin code you entered is wrong."), MessageBox.TYPE_ERROR)	
 
 	def asciiOn(self):
 		rcinput = eRCInput.getInstance()
@@ -837,6 +886,7 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 				self.goToPlayingService()
 
 	def __onClose(self):
+		config.misc.standbyCounter.removeNotifier(self.standbyCountChanged)
 		try:
 			NavigationInstance.instance.RecordTimer.on_state_change.remove(self.list.updateRecordings)
 		except Exception, e:
@@ -1290,7 +1340,7 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 		title = _("Recorded files...")
 		if config.usage.setup_level.index >= 2: # expert+
 			title += "  " + config.movielist.last_videodir.value
-		if self.selected_tags is not None:
+		if self.selected_tags:
 			title += " - " + ','.join(self.selected_tags)
 		self.setTitle(title)
 		self.displayMovieOffStatus()
@@ -1323,7 +1373,15 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 				config.movielist.last_videodir.value
 			)
 
-	def gotFilename(self, res, selItem = None):
+	def gotFilename(self, res, selItem=None):
+		def servicePinEntered(res, selItem, result):
+			if result:
+				from Components.ParentalControl import parentalControl
+				parentalControl.setSessionPinCached()
+				parentalControl.hideBlacklist()
+				self.gotFilename(res, selItem)
+			elif result == False:
+				self.session.open(MessageBox, _("The pin code you entered is wrong."), MessageBox.TYPE_INFO, timeout=3)
 		if not res:
 			return
 		# serviceref must end with /
@@ -1332,6 +1390,12 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 		currentDir = config.movielist.last_videodir.value
 		if res != currentDir:
 			if os.path.isdir(res):
+				baseName = os.path.basename(res[:-1])
+				if config.ParentalControl.servicepinactive.value and baseName.startswith(".") and not baseName.startswith(".Trash"):
+					from Components.ParentalControl import parentalControl
+					if not parentalControl.sessionPinCached:
+						self.session.openWithCallback(boundFunction(servicePinEntered, res, selItem), PinInput, pinList=[x.value for x in config.ParentalControl.servicepin], triesEntry=config.ParentalControl.retries.servicepin, title=_("Please enter the correct pin code"), windowTitle=_("Enter pin code"))
+						return
 				config.movielist.last_videodir.value = res
 				config.movielist.last_videodir.save()
 				self.loadLocalSettings()
@@ -1342,12 +1406,7 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 				else:
 					self.reloadList(home = True, sel = eServiceReference("2:0:1:0:0:0:0:0:0:0:" + currentDir))
 			else:
-				self.session.open(
-					MessageBox,
-					_("Directory %s does not exist.") % (res),
-					type = MessageBox.TYPE_ERROR,
-					timeout = 5
-					)
+				self.session.open(MessageBox, _("Directory %s does not exist.") % (res), type=MessageBox.TYPE_ERROR, timeout=5)
 
 	def showAll(self):
 		self.selected_tags_ele = None
@@ -1514,7 +1573,10 @@ class MovieSelection(Screen, HelpableScreen, SelectionEventInfo, InfoBarBase):
 		from ServiceReference import ServiceReference
 		item = self.getCurrentSelection()
 		info = item[1]
-		serviceref = ServiceReference(None, reftype = eServiceReference.idDVB, path = item[0].getPath())
+		filepath = item[0].getPath()
+		if not filepath.endswith('.ts'):
+			return
+		serviceref = ServiceReference(None, reftype = eServiceReference.idDVB, path = filepath)
 		name = info.getName(item[0]) + ' - decoded'
 		description = info.getInfoString(item[0], iServiceInformation.sDescription)
 		recording = RecordTimer.RecordTimerEntry(serviceref, int(time.time()), int(time.time()) + 3600, name, description, 0, dirname = preferredTimerPath())

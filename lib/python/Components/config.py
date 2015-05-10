@@ -129,6 +129,10 @@ class ConfigElement(object):
 		if initial_call:
 			notifier(self)
 
+	def removeNotifier(self, notifier):
+		notifier in self.notifiers and self.notifiers.remove(notifier)
+		notifier in self.notifiers_final and self.notifiers_final.remove(notifier)
+
 	def disableSave(self):
 		self.save_disabled = True
 
@@ -795,8 +799,6 @@ class ConfigInteger(ConfigSequence):
 class ConfigPIN(ConfigInteger):
 	def __init__(self, default, len = 4, censor = ""):
 		assert isinstance(default, int), "ConfigPIN default must be an integer"
-		if default == -1:
-			default = "aaaa"
 		ConfigSequence.__init__(self, seperator = ":", limits = [(0, (10**len)-1)], censor_char = censor, default = default)
 		self.len = len
 

@@ -8,7 +8,7 @@ from Components.NimManager import nimmanager
 from Components.Button import Button
 from Components.Label import Label
 from Components.SelectionList import SelectionList, SelectionEntryComponent
-from Components.config import getConfigListEntry, config, ConfigNothing, ConfigSelection, updateConfigElement, ConfigSatlist, ConfigYesNo
+from Components.config import getConfigListEntry, config, ConfigNothing, ConfigSelection, updateConfigElement, ConfigSatlist, ConfigYesNo, configfile
 from Components.Sources.List import List
 from Screens.MessageBox import MessageBox
 from Screens.ChoiceBox import ChoiceBox
@@ -563,13 +563,14 @@ class NimSetup(Screen, ConfigListScreen, ServiceStopScreen):
 			# sanity check for empty sat list
 			if self.nimConfig.configMode.value != "satposdepends" and len(nimmanager.getSatListForNim(self.slotid)) < 1:
 				self.nimConfig.configMode.value = "nothing"
-		for x in self["config"].list:
-			x[1].save()
+		if self["config"].isChanged():
+			for x in self["config"].list:
+				x[1].save()
+			configfile.save()
 
 	def cancelConfirm(self, result):
 		if not result:
 			return
-
 		for x in self["config"].list:
 			x[1].cancel()
 		# we need to call saveAll to reset the connectedTo choices
@@ -600,12 +601,16 @@ class NimSelection(Screen):
 
 		self.setResultClass()
 
-		self["actions"] = ActionMap(["OkCancelActions"],
+		self["actions"] = ActionMap(["OkCancelActions", "MenuActions"],
 		{
-			"ok": self.okbuttonClick ,
-			"cancel": self.close
+			"ok": self.okbuttonClick,
+			"cancel": self.close,
+			"menu": self.exit,
 		}, -2)
 		self.setTitle(_("Choose Tuner"))
+
+	def exit(self):
+		self.close(True)
 
 	def setResultClass(self):
 		self.resultclass = NimSetup
@@ -614,12 +619,12 @@ class NimSelection(Screen):
 		nim = self["nimlist"].getCurrent()
 		nim = nim and nim[3]
 		if nim is not None and not nim.empty and nim.isSupported():
-			self.session.openWithCallback(self.updateList, self.resultclass, nim.slot)
+			self.session.openWithCallback(boundFunction(self.updateList, self["nimlist"].getIndex()), self.resultclass, nim.slot)
 
 	def showNim(self, nim):
 		return True
 
-	def updateList(self):
+	def updateList(self, index=None):
 		self.list = [ ]
 		for x in nimmanager.nim_slots:
 			slotid = x.slot
@@ -679,6 +684,8 @@ class NimSelection(Screen):
 				self.list.append((slotid, x.friendly_full_description, text, x))
 		self["nimlist"].setList(self.list)
 		self["nimlist"].updateList(self.list)
+		if index is not None:
+			self["nimlist"].setIndex(index)
 
 class SelectSatsEntryScreen(Screen):
 	skin = """

@@ -225,16 +225,6 @@ class Session:
 			self.current_dialog.removeSummary(self.summary)
 			self.popSummary()
 
-	def create(self, screen, arguments, **kwargs):
-		# creates an instance of 'screen' (which is a class)
-		try:
-			return screen(self, *arguments, **kwargs)
-		except:
-			errstr = "Screen %s(%s, %s): %s" % (str(screen), str(arguments), str(kwargs), exc_info()[0])
-			print errstr
-			print_exc(file=stdout)
-			enigma.quitMainloop(5)
-
 	def instantiateDialog(self, screen, *arguments, **kwargs):
 		return self.doInstantiateDialog(screen, arguments, kwargs, self.desktop)
 
@@ -252,28 +242,14 @@ class Session:
 
 	def doInstantiateDialog(self, screen, arguments, kwargs, desktop):
 		# create dialog
-
-		try:
-			dlg = self.create(screen, arguments, **kwargs)
-		except:
-			print 'EXCEPTION IN DIALOG INIT CODE, ABORTING:'
-			print '-'*60
-			print_exc(file=stdout)
-			enigma.quitMainloop(5)
-			print '-'*60
-
+		dlg = screen(self, *arguments, **kwargs)
 		if dlg is None:
 			return
-
 		# read skin data
 		readSkin(dlg, None, dlg.skinName, desktop)
-
 		# create GUI view of this dialog
-		assert desktop is not None
-
 		dlg.setDesktop(desktop)
 		dlg.applySkin()
-
 		return dlg
 
 	def pushCurrent(self):
@@ -438,6 +414,7 @@ from Components.VolumeControl import VolumeControl
 
 def runScreenTest():
 	config.misc.startCounter.value += 1
+	config.misc.startCounter.save()
 
 	profile("readPluginList")
 	plugins.readPluginList(resolveFilename(SCOPE_PLUGINS))
@@ -503,8 +480,6 @@ def runScreenTest():
 		f.close()		
 	
 	runReactor()
-
-	config.misc.startCounter.save()
 
 	profile("wakeup")
 	from time import time, strftime, localtime

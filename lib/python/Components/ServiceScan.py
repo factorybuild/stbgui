@@ -1,6 +1,6 @@
 from enigma import eComponentScan, iDVBFrontend
 from Components.NimManager import nimmanager as nimmgr
-from Components.Converter.ChannelNumbers import channelnumbers
+from Tools.Transponder import getChannelNumber
 
 class ServiceScan:
 
@@ -10,10 +10,10 @@ class ServiceScan:
 	Error = 4
 
 	Errors = {
-		0: "error starting scanning",
-		1: "error while scanning",
-		2: "no resource manager",
-		3: "no channel list"
+		0: _("error starting scanning"),
+		1: _("error while scanning"),
+		2: _("no resource manager"),
+		3: _("no channel list")
 		}
 
 	def scanStatusChanged(self):
@@ -90,7 +90,7 @@ class ServiceScan:
 					elif tp_type == iDVBFrontend.feTerrestrial:
 						network = _("Terrestrial")
 						tp = transponder.getDVBT()
-						channel = channelnumbers.getChannelNumber(tp.frequency, self.scanList[self.run]["feid"])
+						channel = getChannelNumber(tp.frequency, self.scanList[self.run]["feid"])
 						if channel:
 							channel = _("CH") + "%s " % channel
 						freqMHz = "%0.1f MHz" % (tp.frequency/1000000.)

@@ -1,7 +1,8 @@
 from Screen import Screen
+from Screens.ParentalControlSetup import ProtectedScreen
 from enigma import eConsoleAppContainer, eDVBDB
 
-from Components.ActionMap import ActionMap
+from Components.ActionMap import ActionMap, NumberActionMap
 from Components.config import config, ConfigSubsection, ConfigText
 from Components.PluginComponent import plugins
 from Components.PluginList import *
@@ -45,9 +46,10 @@ class PluginBrowserSummary(Screen):
 		self["desc"].text = desc
 
 
-class PluginBrowser(Screen):
+class PluginBrowser(Screen, ProtectedScreen):
 	def __init__(self, session):
 		Screen.__init__(self, session)
+		ProtectedScreen.__init__(self)
 
 		self.firsttime = True
 
@@ -57,10 +59,11 @@ class PluginBrowser(Screen):
 		self.list = []
 		self["list"] = PluginList(self.list)
 
-		self["actions"] = ActionMap(["WizardActions"],
+		self["actions"] = ActionMap(["WizardActions","MenuActions"],
 		{
 			"ok": self.save,
 			"back": self.close,
+			"menu": self.exit,
 		})
 		self["PluginDownloadActions"] = ActionMap(["ColorActions"],
 		{
@@ -72,12 +75,31 @@ class PluginBrowser(Screen):
 			"moveUp": self.moveUp,
 			"moveDown": self.moveDown
 		})
+		self["NumberActions"] = NumberActionMap(["NumberActions"],
+		{
+			"1": self.keyNumberGlobal,
+			"2": self.keyNumberGlobal,
+			"3": self.keyNumberGlobal,
+			"4": self.keyNumberGlobal,
+			"5": self.keyNumberGlobal,
+			"6": self.keyNumberGlobal,
+			"7": self.keyNumberGlobal,
+			"8": self.keyNumberGlobal,
+			"9": self.keyNumberGlobal,
+			"0": self.keyNumberGlobal
+		})
 
 		self.onFirstExecBegin.append(self.checkWarnings)
 		self.onShown.append(self.updateList)
 		self.onChangedEntry = []
 		self["list"].onSelectionChanged.append(self.selectionChanged)
 		self.onLayoutFinish.append(self.saveListsize)
+
+	def isProtected(self):
+		return config.ParentalControl.setuppinactive.value and (not config.ParentalControl.config_sections.main_menu.value or hasattr(self.session, 'infobar') and self.session.infobar is None) and config.ParentalControl.config_sections.plugin_browser.value
+
+	def exit(self):
+		self.close(True)
 
 	def saveListsize(self):
 		listsize = self["list"].instance.size()
@@ -113,6 +135,22 @@ class PluginBrowser(Screen):
 	def run(self):
 		plugin = self["list"].l.getCurrentSelection()[0]
 		plugin(session=self.session)
+
+	def setDefaultList(self, answer):
+		if answer:
+			config.misc.pluginbrowser.plugin_order.value = ""
+			config.misc.pluginbrowser.plugin_order.save()
+			self.updateList()
+
+	def keyNumberGlobal(self, number):
+		if number == 0:
+			if len(self.list) > 0 and config.misc.pluginbrowser.plugin_order.value != "":
+				self.session.openWithCallback(self.setDefaultList, MessageBox, _("Sort plugins list to default?"), MessageBox.TYPE_YESNO)
+		else:
+			real_number = number - 1
+			if real_number < len(self.list):
+				self["list"].moveToIndex(real_number)
+				self.run()
 
 	def moveUp(self):
 		self.move(-1)
