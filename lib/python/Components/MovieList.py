@@ -610,7 +610,7 @@ class MovieList(GUIComponent):
 		rootPath = os.path.normpath(root.getPath());
 		parent = None
 		# Don't navigate above the "root"
-		if len(rootPath) > 1 and (os.path.realpath(rootPath) != config.movielist.root.value):
+		if len(rootPath) > 1 and (os.path.realpath(rootPath) != os.path.realpath(config.movielist.root.value)):
 			parent = os.path.split(os.path.normpath(rootPath))[0]
 			if parent and (parent not in defaultInhibitDirs):
 				# enigma wants an extra '/' appended
@@ -740,7 +740,7 @@ class MovieList(GUIComponent):
 				self.tags[match] = set(tags)
 			else:
 				match = ' '.join(tags)
-				if len(match) > 2: #Omit small words
+				if (len(match) > 2) or (match in realtags): #Omit small words, only for auto tags
 					self.tags[match] = set(tags)
 		# Adding the realtags to the tag list
 		for tag in realtags:
