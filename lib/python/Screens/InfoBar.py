@@ -240,8 +240,6 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 				"EPGButtonPressed": (self.showDefaultEPG,  _("open EPG...")),
 				"InfoButtonPressedLong": (self.showEventInfoPlugins, _("select Info...")),
 				"EPGButtonPressedLong": (self.showEventGuidePlugins,  _("select EPG...")),
-				"channelUp": (self.openEPGserviceList, _("open EPG channel selection...")),
-				"channelDown": (self.openEPGserviceList, _("open EPG channel selection...")),
 				"leavePlayer": (self.leavePlayer, _("leave movie player...")),
 				"leavePlayerOnExit": (self.leavePlayerOnExit, _("leave movie player...")),
 				"channelUp": (self.channelUp, _("when PiPzap enabled zap channel up...")),
