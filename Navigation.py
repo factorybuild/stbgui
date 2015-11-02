@@ -1,5 +1,6 @@
-from enigma import eServiceCenter, eServiceReference, eTimer, pNavigation, getBestPlayableServiceReference, iPlayableService, eActionMap
+from enigma import eServiceCenter, eServiceReference, eTimer, pNavigation, getBestPlayableServiceReference, iPlayableService, eActionMap, setPreferredTuner
 from Components.ParentalControl import parentalControl
+from Components.SystemInfo import SystemInfo
 from Components.config import config, configfile
 from Tools.BoundFunction import boundFunction
 from Tools.StbHardware import setFPWakeuptime, getFPWakeuptime, getFPWasTimerWakeup
@@ -34,14 +35,21 @@ class Navigation:
 		self.currentlyPlayingService = None
 		self.RecordTimer = RecordTimer.RecordTimer()
 		self.__wasTimerWakeup = getFPWasTimerWakeup()
+		startup_to_standby = config.usage.startup_to_standby.value
+		wakeup_time_type = config.misc.prev_wakeup_time_type.value
 		if self.__wasTimerWakeup:
 			RecordTimer.RecordTimerEntry.setWasInDeepStandby()
 		if config.misc.RestartUI.value:
 			config.misc.RestartUI.value = False
 			config.misc.RestartUI.save()
 			configfile.save()
-		elif config.usage.startup_to_standby.value or self.__wasTimerWakeup:
-			Notifications.AddNotification(Screens.Standby.Standby)
+		elif startup_to_standby == "yes" or self.__wasTimerWakeup and config.misc.prev_wakeup_time.value and ((wakeup_time_type == 0 or wakeup_time_type == 1) or ( wakeup_time_type == 3 and startup_to_standby == "except")):
+			if not Screens.Standby.inTryQuitMainloop:
+				Notifications.AddNotification(Screens.Standby.Standby)
+		if config.misc.prev_wakeup_time.value:
+			config.misc.prev_wakeup_time.value = 0
+			config.misc.prev_wakeup_time.save()
+			configfile.save()
 
 	def wasTimerWakeup(self):
 		return self.__wasTimerWakeup
@@ -96,10 +104,32 @@ class Navigation:
 				self.currentlyPlayingServiceOrGroup = ref
 				if InfoBarInstance and InfoBarInstance.servicelist.servicelist.setCurrent(ref, adjust):
 					self.currentlyPlayingServiceOrGroup = InfoBarInstance.servicelist.servicelist.getCurrent()
+				setPriorityFrontend = False
+				if SystemInfo["DVB-T_priority_tuner_available"] or SystemInfo["DVB-C_priority_tuner_available"] or SystemInfo["DVB-S_priority_tuner_available"]:
+					str_service = playref.toString()
+					if '%3a//' not in str_service and not str_service.rsplit(":", 1)[1].startswith("/"):
+						type_service = playref.getUnsignedData(4) >> 16
+						if type_service == 0xEEEE:
+							if config.usage.frontend_priority_dvbt.value != "-2":
+								if config.usage.frontend_priority_dvbt.value != config.usage.frontend_priority.value:
+									setPreferredTuner(int(config.usage.frontend_priority_dvbt.value))
+									setPriorityFrontend = True
+						elif type_service == 0xFFFF:
+							if config.usage.frontend_priority_dvbc.value != "-2":
+								if config.usage.frontend_priority_dvbc.value != config.usage.frontend_priority.value:
+									setPreferredTuner(int(config.usage.frontend_priority_dvbc.value))
+									setPriorityFrontend = True
+						else:
+							if config.usage.frontend_priority_dvbs.value != "-2":
+								if config.usage.frontend_priority_dvbs.value != config.usage.frontend_priority.value:
+									setPreferredTuner(int(config.usage.frontend_priority_dvbs.value))
+									setPriorityFrontend = True
 				if self.pnav.playService(playref):
 					print "Failed to start", playref
 					self.currentlyPlayingServiceReference = None
 					self.currentlyPlayingServiceOrGroup = None
+				if setPriorityFrontend:
+					setPreferredTuner(int(config.usage.frontend_priority.value))
 				return 0
 		elif oldref and InfoBarInstance and InfoBarInstance.servicelist.servicelist.setCurrent(oldref, adjust):
 			self.currentlyPlayingServiceOrGroup = InfoBarInstance.servicelist.servicelist.getCurrent()
