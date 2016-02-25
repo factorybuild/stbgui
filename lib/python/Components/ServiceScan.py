@@ -19,7 +19,7 @@ class ServiceScan:
 	def scanStatusChanged(self):
 		if self.state == self.Running:
 			self.progressbar.setValue(self.scan.getProgress())
-			self.lcd_summary.updateProgress(self.scan.getProgress())
+			self.lcd_summary and self.lcd_summary.updateProgress(self.scan.getProgress())
 			if self.scan.isDone():
 				errcode = self.scan.getError()
 
@@ -160,7 +160,8 @@ class ServiceScan:
 	def updatePass(self):
 		size = len(self.scanList)
 		if size > 1:
-			self.passNumber.setText(_("pass") + " " + str(self.run + 1) + "/" + str(size) + " (" + _("Tuner") + " " + str(self.scanList[self.run]["feid"]) + ")")
+			txt = "%s %s/%s (%s)" % (_("pass"), self.run + 1, size, nimmgr.getNim(self.scanList[self.run]["feid"]).slot_name)
+			self.passNumber.setText(txt)
 
 	def execBegin(self):
 		self.doRun()
@@ -191,7 +192,7 @@ class ServiceScan:
 		newServiceName = self.scan.getLastServiceName()
 		newServiceRef = self.scan.getLastServiceRef()
 		self.servicelist.addItem((newServiceName, newServiceRef))
-		self.lcd_summary.updateService(newServiceName)
+		self.lcd_summary and self.lcd_summary.updateService(newServiceName)
 
 	def destroy(self):
 		pass

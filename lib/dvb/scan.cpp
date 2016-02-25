@@ -107,6 +107,12 @@ int eDVBScan::isValidONIDTSID(int orbital_position, eOriginalNetworkID onid, eTr
 	case 32: // NSS 806 (40.5W) 4059R, 3774L
 		ret = orbital_position != 3195 || tsid != 21;
 		break;
+	case 126:  // 11221H and 11387H on Utelsat 7.0E with same ONID/TSID (126/40700)
+		ret = orbital_position != 70 || tsid != 40700;
+		break;
+	case 3622:  // 11881H and 12284V on Badr 26.0E with same ONID/TSID (3622/100)
+		ret = orbital_position != 260 || tsid != 100;
+		break;
 	default:
 		ret = onid.get() < 0xFF00;
 		break;
@@ -381,6 +387,7 @@ void eDVBScan::PMTready(int err)
 				switch ((*es)->getType())
 				{
 				case 0x1b: // AVC Video Stream (MPEG4 H264)
+				case 0x24: // H265 HEVC
 				case 0x10: // MPEG 4 Part 2
 				case 0x01: // MPEG 1 video
 				case 0x02: // MPEG 2 video
@@ -1074,6 +1081,17 @@ void eDVBScan::insertInto(iDVBChannelList *db, bool backgroundscanresult)
 		bool clearTerrestrial=false;
 		bool clearCable=false;
 		std::set<unsigned int> scanned_sat_positions;
+
+		for (std::map<eServiceReferenceDVB, ePtr<eDVBService> >::const_iterator
+			service(m_new_services.begin()); service != m_new_services.end(); ++service)
+		{
+			ePtr<eDVBService> dvb_service;
+			if (!db->getService(service->first, dvb_service))
+			{
+				if (dvb_service->m_flags & eDVBService::dxDontshow)
+					service->second->m_flags |= eDVBService::dxDontshow;
+			}
+		}
 
 		std::list<ePtr<iDVBFrontendParameters> >::iterator it(m_ch_scanned.begin());
 		for (;it != m_ch_scanned.end(); ++it)

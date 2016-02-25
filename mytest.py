@@ -225,7 +225,7 @@ class Session:
 		self.current_dialog.restoreKeyboardMode()
 		self.current_dialog.hide()
 
-		if last:
+		if last and self.summary:
 			self.current_dialog.removeSummary(self.summary)
 			self.popSummary()
 
@@ -237,12 +237,13 @@ class Session:
 		screen.doClose()
 
 	def instantiateSummaryDialog(self, screen, **kwargs):
-		self.pushSummary()
-		summary = screen.createSummary() or SimpleSummary
-		arguments = (screen,)
-		self.summary = self.doInstantiateDialog(summary, arguments, kwargs, self.summary_desktop)
-		self.summary.show()
-		screen.addSummary(self.summary)
+		if self.summary_desktop is not None:
+			self.pushSummary()
+			summary = screen.createSummary() or SimpleSummary
+			arguments = (screen,)
+			self.summary = self.doInstantiateDialog(summary, arguments, kwargs, self.summary_desktop)
+			self.summary.show()
+			screen.addSummary(self.summary)
 
 	def doInstantiateDialog(self, screen, arguments, kwargs, desktop):
 		# create dialog
@@ -311,16 +312,16 @@ class Session:
 		self.execEnd()
 
 	def pushSummary(self):
-		if self.summary is not None:
+		if self.summary:
 			self.summary.hide()
-		self.summary_stack.append(self.summary)
-		self.summary = None
+			self.summary_stack.append(self.summary)
+			self.summary = None
 
 	def popSummary(self):
-		if self.summary is not None:
+		if self.summary:
 			self.summary.doClose()
-		self.summary = self.summary_stack.pop()
-		if self.summary is not None:
+		self.summary = self.summary_stack and self.summary_stack.pop()
+		if self.summary:
 			self.summary.show()
 
 profile("Standby,PowerKey")
@@ -511,7 +512,7 @@ def runScreenTest():
 			setRTCtime(nowTime)
 		print "set wakeup time to", strftime("%Y/%m/%d %H:%M", localtime(wptime))
 		setFPWakeuptime(wptime)
-		config.misc.prev_wakeup_time.value = startTime[0]
+		config.misc.prev_wakeup_time.value = int(startTime[0])
 		config.misc.prev_wakeup_time_type.value = startTime[1]
 		config.misc.prev_wakeup_time_type.save()
 	else:
@@ -558,6 +559,7 @@ Components.UsageConfig.InitUsageConfig()
 profile("keymapparser")
 import keymapparser
 keymapparser.readKeymap(config.usage.keymap.value)
+keymapparser.readKeymap(config.usage.keytrans.value)
 
 profile("Network")
 import Components.Network

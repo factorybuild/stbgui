@@ -23,8 +23,8 @@
 		else \
 		{ \
 			eDebugNoNewLineStart("SIMULATE:"); \
-			eDebugNoNewline(x); \
-			eDebugNoNewline("\n"); \
+			eDebugNoNewLine(x); \
+			eDebugNoNewLine("\n"); \
 		}
 #endif
 
@@ -468,10 +468,12 @@ int eDVBFrontend::PriorityOrder=0;
 int eDVBFrontend::PreferredFrontendIndex = -1;
 
 eDVBFrontend::eDVBFrontend(const char *devicenodename, int fe, int &ok, bool simulate, eDVBFrontend *simulate_fe)
-	:m_simulate(simulate), m_enabled(false), m_simulate_fe(simulate_fe), m_dvbid(fe), m_slotid(fe)
+	:m_simulate(simulate), m_enabled(false), m_fbc(false), m_simulate_fe(simulate_fe), m_dvbid(fe), m_slotid(fe)
 	,m_fd(-1), m_dvbversion(0), m_rotor_mode(false), m_need_rotor_workaround(false)
 	,m_state(stateClosed), m_timeout(0), m_tuneTimer(0)
 {
+	char filename[64];
+
 	m_filename = devicenodename;
 
 	m_timeout = eTimer::create(eApp);
@@ -484,6 +486,11 @@ eDVBFrontend::eDVBFrontend(const char *devicenodename, int fe, int &ok, bool sim
 		m_data[i] = -1;
 
 	m_idleInputpower[0]=m_idleInputpower[1]=0;
+
+	snprintf(filename, sizeof(filename), "/proc/stb/frontend/%d/fbc_id", m_slotid);
+
+	if (access(filename, F_OK) == 0)
+		m_fbc = true;
 
 	ok = !openFrontend();
 	closeFrontend();
@@ -530,6 +537,7 @@ int eDVBFrontend::openFrontend()
 			if (ioctl(m_fd, FE_GET_PROPERTY, &cmdseq) >= 0)
 			{
 				m_dvbversion = p.u.data;
+				eDebug("[eDVBFrontend] frontend %d has DVB API %02x ", m_dvbid, m_dvbversion);
 			}
 #endif
 		}
@@ -781,6 +789,7 @@ void eDVBFrontend::calculateSignalQuality(int snr, int &signalquality, int &sign
 {
 	int sat_max = 1600; // for stv0288 / bsbe2
 	int ret = 0x12345678;
+	int ter_max = 2900;
 	if (!strcmp(m_description, "AVL2108")) // ET9000
 	{
 		ret = (int)(snr / 40.5);
@@ -960,6 +969,10 @@ void eDVBFrontend::calculateSignalQuality(int snr, int &signalquality, int &sign
 	{
 		ret = (int)((((double(snr) / (65536.0 / 100.0)) * 0.1800) - 1.0000) * 100);
 	}
+	else if (!strcmp(m_description, "Vuplus DVB-S NIM(7376 FBC)")) // VU+ Solo4k
+	{
+		ret = (int)((((double(snr) / (65536.0 / 100.0)) * 0.1850) - 0.3500) * 100);
+	}
 	else if (!strcmp(m_description, "Genpix"))
 	{
 		ret = (int)((snr << 1) / 5);
@@ -978,6 +991,25 @@ void eDVBFrontend::calculateSignalQuality(int snr, int &signalquality, int &sign
 		case eDVBFrontendParametersCable::Modulation_QAM128: ret = (int)(-875 * log(((double)mse) / 650)); break;
 		default: break;
 		}
+	}
+	else if (!strcmp(m_description, "Si216x"))
+	{
+		eDVBFrontendParametersTerrestrial parm;
+
+		oparm.getDVBT(parm);
+
+		switch (parm.system)
+		{
+			case eDVBFrontendParametersTerrestrial::System_DVB_T:
+			case eDVBFrontendParametersTerrestrial::System_DVB_T2: 
+			case eDVBFrontendParametersTerrestrial::System_DVB_T_T2: ret = (int)(snr / 58); ter_max = 1700; break;
+			default: break;
+		}
+	}
+	else if (strstr(m_description, "Sundtek DVB-T (III)")) // Sundtek MediaTV Digital Home III...dvb-t/t2 mode
+	{
+		ret = (int)(snr / 75);
+		ter_max = 1700;
 	}
 
 	signalqualitydb = ret;
@@ -998,7 +1030,7 @@ void eDVBFrontend::calculateSignalQuality(int snr, int &signalquality, int &sign
 			signalquality = (ret >= 4200 ? 65536 : ret * 65536 / 4200);
 			break;
 		case feTerrestrial: // we assume a max of 29db here
-			signalquality = (ret >= 2900 ? 65536 : ret * 65536 / 2900);
+			signalquality = (ret >= ter_max ? 65536 : ret * 65536 / ter_max);
 			break;
 		case feATSC: // we assume a max of 42db here
 			signalquality = (ret >= 4200 ? 65536 : ret * 65536 / 4200);

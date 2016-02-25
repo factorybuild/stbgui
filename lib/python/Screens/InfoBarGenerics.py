@@ -210,10 +210,9 @@ class InfoBarScreenSaver:
 			eActionMap.getInstance().unbindAction('', self.keypressScreenSaver)
 
 class SecondInfoBar(Screen):
-
-	def __init__(self, session):
+	def __init__(self, session, skinName):
 		Screen.__init__(self, session)
-		self.skin = None
+		self.skinName = skinName
 
 class InfoBarShowHide(InfoBarScreenSaver):
 	""" InfoBar show/hide control, accepts toggleShow and hide actions, might start
@@ -228,6 +227,8 @@ class InfoBarShowHide(InfoBarScreenSaver):
 			{
 				"toggleShow": self.okButtonCheck,
 				"hide": self.keyHide,
+				"toggleShowLong" : self.toggleShowLong,
+				"hideLong" : self.hideLong,
 			}, 1) # lower prio to make it possible to override ok and cancel..
 
 		self.__event_tracker = ServiceEventTracker(screen=self, eventmap=
@@ -248,16 +249,20 @@ class InfoBarShowHide(InfoBarScreenSaver):
 
 		self.onShowHideNotifiers = []
 
-		self.secondInfoBarScreen = ""
+		self.actualSecondInfoBarScreen = None
 		if isStandardInfoBar(self):
-			self.secondInfoBarScreen = self.session.instantiateDialog(SecondInfoBar)
+			self.secondInfoBarScreen = self.session.instantiateDialog(SecondInfoBar, "SecondInfoBar")
 			self.secondInfoBarScreen.show()
+			self.secondInfoBarScreenSimple = self.session.instantiateDialog(SecondInfoBar, "SecondInfoBarSimple")
+			self.secondInfoBarScreenSimple.show()
+			self.actualSecondInfoBarScreen = config.usage.show_simple_second_infobar.value and self.secondInfoBarScreenSimple.skinAttributes and self.secondInfoBarScreenSimple or self.secondInfoBarScreen
 
 		self.onLayoutFinish.append(self.__layoutFinished)
 
 	def __layoutFinished(self):
-		if self.secondInfoBarScreen:
+		if self.actualSecondInfoBarScreen:
 			self.secondInfoBarScreen.hide()
+			self.secondInfoBarScreenSimple.hide()
 
 	def __onShow(self):
 		self.__state = self.STATE_SHOWN
@@ -267,10 +272,26 @@ class InfoBarShowHide(InfoBarScreenSaver):
 
 	def __onHide(self):
 		self.__state = self.STATE_HIDDEN
-		if self.secondInfoBarScreen:
-			self.secondInfoBarScreen.hide()
+		if self.actualSecondInfoBarScreen:
+			self.actualSecondInfoBarScreen.hide()
 		for x in self.onShowHideNotifiers:
 			x(False)
+
+	def toggleShowLong(self):
+		if not config.usage.ok_is_channelselection.value:
+			self.toggleSecondInfoBar()
+
+	def hideLong(self):
+		if config.usage.ok_is_channelselection.value:
+			self.toggleSecondInfoBar()
+
+	def toggleSecondInfoBar(self):
+		if self.actualSecondInfoBarScreen and not self.shown and not self.actualSecondInfoBarScreen.shown and self.secondInfoBarScreenSimple.skinAttributes and self.secondInfoBarScreen.skinAttributes:
+			self.actualSecondInfoBarScreen.hide()
+			config.usage.show_simple_second_infobar.value = not config.usage.show_simple_second_infobar.value
+			config.usage.show_simple_second_infobar.save()
+			self.actualSecondInfoBarScreen = config.usage.show_simple_second_infobar.value and self.secondInfoBarScreenSimple or self.secondInfoBarScreen
+			self.showSecondInfoBar()
 
 	def keyHide(self):
 		if self.__state == self.STATE_HIDDEN and self.session.pipshown and "popup" in config.usage.pip_hideOnExit.value:
@@ -303,7 +324,7 @@ class InfoBarShowHide(InfoBarScreenSaver):
 	def startHideTimer(self):
 		if self.__state == self.STATE_SHOWN and not self.__locked:
 			self.hideTimer.stop()
-			if self.secondInfoBarScreen and self.secondInfoBarScreen.shown:
+			if self.actualSecondInfoBarScreen and self.actualSecondInfoBarScreen.shown:
 				idx = config.usage.show_second_infobar.index - 1
 			else:
 				idx = config.usage.infobar_timeout.index
@@ -335,17 +356,17 @@ class InfoBarShowHide(InfoBarScreenSaver):
 		if isStandardInfoBar(self) and config.usage.show_second_infobar.value == "EPG":
 			if not(hasattr(self, "hotkeyGlobal") and self.hotkeyGlobal("info") != 0):
 				self.showDefaultEPG()
-		elif self.secondInfoBarScreen and config.usage.show_second_infobar.value and not self.secondInfoBarScreen.shown:
+		elif self.actualSecondInfoBarScreen and config.usage.show_second_infobar.value and not self.actualSecondInfoBarScreen.shown:
 			self.show()
-			self.secondInfoBarScreen.show()
+			self.actualSecondInfoBarScreen.show()
 			self.startHideTimer()
 		else:
 			self.hide()
 			self.hideTimer.stop()
 
 	def showFirstInfoBar(self):
-		if self.__state == self.STATE_HIDDEN or self.secondInfoBarScreen and self.secondInfoBarScreen.shown:
-			self.secondInfoBarScreen and self.secondInfoBarScreen.hide()
+		if self.__state == self.STATE_HIDDEN or self.actualSecondInfoBarScreen and self.actualSecondInfoBarScreen.shown:
+			self.actualSecondInfoBarScreen and self.actualSecondInfoBarScreen.hide()
 			self.show()
 		else:
 			self.hide()
@@ -415,7 +436,7 @@ class NumberZap(Screen):
 				self.startBouquet = self.bouquet
 
 	def keyBlue(self):
-		self.Timer.start(3000, True)
+		self.startTimer()
 		if self.searchNumber:
 			if self.startBouquet == self.bouquet:
 				self.service, self.bouquet = self.searchNumber(int(self["number"].getText()), firstBouquetOnly = True)
@@ -424,7 +445,7 @@ class NumberZap(Screen):
 			self["servicename"].text = self["servicename_summary"].text = ServiceReference(self.service).getServiceName()
 
 	def keyNumberGlobal(self, number):
-		self.Timer.start(1000, True)
+		self.startTimer(repeat=True)
 		self.numberString = self.numberString + str(number)
 		self["number"].text = self["number_summary"].text = self.numberString
 
@@ -466,8 +487,18 @@ class NumberZap(Screen):
 			})
 
 		self.Timer = eTimer()
-		self.Timer.callback.append(self.keyOK)
-		self.Timer.start(3000, True)
+		self.Timer.callback.append(self.endTimer)
+		self.Timer.start(250)
+		self.startTimer()
+
+	def startTimer(self, repeat=False):
+		self.timer_target = repeat and self.timer_counter < 6 and [4,4,4,5,8,10][self.timer_counter] or 12
+		self.timer_counter = 0
+
+	def endTimer(self):
+		self.timer_counter += 1
+		if self.timer_counter > self.timer_target:
+			self.keyOK()
 
 class InfoBarNumberZap:
 	""" Handles an initial number for NumberZapping """
@@ -529,7 +560,7 @@ class InfoBarNumberZap:
 			if bouquetlist:
 				bouquet = bouquetlist.getNext()
 				while bouquet.valid():
-					if bouquet.flags & eServiceReference.isDirectory:
+					if bouquet.flags & eServiceReference.isDirectory and not bouquet.flags & eServiceReference.isInvisible:
 						service = self.searchNumberHelper(serviceHandler, number, bouquet)
 						if service:
 							playable = not (service.flags & (eServiceReference.isMarker|eServiceReference.isDirectory)) or (service.flags & eServiceReference.isNumberedMarker)
@@ -578,7 +609,7 @@ class InfoBarChannelSelection:
 				"historyBack": (self.historyBack, _("Switch to previous channel in history")),
 				"historyNext": (self.historyNext, _("Switch to next channel in history")),
 				"keyChannelUp": (self.keyChannelUpCheck, self.getKeyChannelUpHelptext),
-				"keyChannelDown": (self.keyChannelDownCheck, self.getKeyChannelDownHelptext), 
+				"keyChannelDown": (self.keyChannelDownCheck, self.getKeyChannelDownHelptext),
 				"openServiceList": (self.openServiceList, _("Open service list")),
 				"openSatellites": (self.openSatellites, _("Open satellites list")),
 			})
@@ -766,10 +797,11 @@ class InfoBarChannelSelection:
 		else:
 			self.servicelist.moveDown()
 		self.servicelist.zap(enable_pipzap = True)
-		
+
 	def openSatellites(self):
 		self.servicelist.showSatellites()
 		self.session.execDialog(self.servicelist)
+
 
 	def openFavouritesList(self):
 		self.servicelist.showFavourites()
@@ -1049,7 +1081,7 @@ class InfoBarEPG:
 	def showEventInfoPlugins(self):
 		pluginlist = self.getEPGPluginList()
 		if pluginlist:
-			self.session.openWithCallback(self.EventInfoPluginChosen, ChoiceBox, title=_("Please choose an extension..."), list=pluginlist, skin_name="EPGExtensionsList", reorderConfig="eventinfo_order")
+			self.session.openWithCallback(self.EventInfoPluginChosen, ChoiceBox, title=_("Please choose an extension..."), list=pluginlist, skin_name="EPGExtensionsList", reorderConfig="eventinfo_order", windowTitle=_("Events info menu"))
 		else:
 			self.openSingleServiceEPG()
 
@@ -2017,7 +2049,7 @@ class InfoBarExtensions:
 		list.extend([(x[0](), x) for x in extensionsList])
 
 		keys += [""] * len(extensionsList)
-		self.session.openWithCallback(self.extensionCallback, ChoiceBox, title=_("Please choose an extension..."), list=list, keys=keys, skin_name="ExtensionsList", reorderConfig="extension_order")
+		self.session.openWithCallback(self.extensionCallback, ChoiceBox, title=_("Please choose an extension..."), list=list, keys=keys, skin_name="ExtensionsList", reorderConfig="extension_order", windowTitle=_("Extensions menu"))
 
 	def extensionCallback(self, answer):
 		if answer is not None:
@@ -2585,13 +2617,18 @@ class InfoBarSubserviceSelection:
 	def prevSubservice(self):
 		self.changeSubservice(-1)
 
+	def playSubservice(self, ref):
+		if ref.getUnsignedData(6) == 0:
+			ref.setName("")
+		self.session.nav.playService(ref, checkParentalControl=False, adjust=False)
+
 	def changeSubservice(self, direction):
 		service = self.session.nav.getCurrentService()
 		subservices = service and service.subServices()
 		n = subservices and subservices.getNumberOfSubservices()
 		if n and n > 0:
 			selection = -1
-			ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+			ref = self.session.nav.getCurrentlyPlayingServiceReference()
 			idx = 0
 			while idx < n:
 				if subservices.getSubservice(idx).toString() == ref.toString():
@@ -2601,14 +2638,14 @@ class InfoBarSubserviceSelection:
 			if selection != -1:
 				selection += direction
 				if selection >= n:
-					selection=0
+					selection = 0
 				elif selection < 0:
-					selection=n-1
+					selection = n - 1
 				newservice = subservices.getSubservice(selection)
 				if newservice.valid():
 					del subservices
 					del service
-					self.session.nav.playService(newservice, False)
+					self.playSubservice(newservice)
 
 	def subserviceSelection(self):
 		service = self.session.nav.getCurrentService()
@@ -2617,18 +2654,21 @@ class InfoBarSubserviceSelection:
 		n = subservices and subservices.getNumberOfSubservices()
 		selection = 0
 		if n and n > 0:
-			ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+			ref = self.session.nav.getCurrentlyPlayingServiceReference()
 			tlist = []
 			idx = 0
+			cnt_parent = 0
 			while idx < n:
 				i = subservices.getSubservice(idx)
 				if i.toString() == ref.toString():
 					selection = idx
 				tlist.append((i.getName(), i))
+				if i.getUnsignedData(6):
+					cnt_parent += 1
 				idx += 1
 
-			if self.bouquets and len(self.bouquets):
-				keys = ["red", "blue", "",  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" ] + [""] * n
+			if cnt_parent and self.bouquets and len(self.bouquets):
+				keys = ["red", "blue", "", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" ] + [""] * n
 				if config.usage.multibouquet.value:
 					tlist = [(_("Quick zap"), "quickzap", service.subServices()), (_("Add to bouquet"), "CALLFUNC", self.addSubserviceToBouquetCallback), ("--", "")] + tlist
 				else:
@@ -2636,7 +2676,7 @@ class InfoBarSubserviceSelection:
 				selection += 3
 			else:
 				tlist = [(_("Quick zap"), "quickzap", service.subServices()), ("--", "")] + tlist
-				keys = ["red", "",  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" ] + [""] * n
+				keys = ["red", "", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" ] + [""] * n
 				selection += 2
 
 			self.session.openWithCallback(self.subserviceSelected, ChoiceBox, title=_("Please select a sub service..."), list = tlist, selection = selection, keys = keys, skin_name = "SubserviceSelection")
@@ -2650,7 +2690,7 @@ class InfoBarSubserviceSelection:
 					self.session.open(SubservicesQuickzap, service[2])
 			else:
 				self["SubserviceQuickzapAction"].setEnabled(True)
-				self.session.nav.playService(service[1], False)
+				self.playSubservice(service[1])
 
 	def addSubserviceToBouquetCallback(self, service):
 		if len(service) > 1 and isinstance(service[1], eServiceReference):
@@ -2663,13 +2703,13 @@ class InfoBarSubserviceSelection:
 				self.bsel = self.session.openWithCallback(self.bouquetSelClosed, BouquetSelector, self.bouquets, self.addSubserviceToBouquet)
 			elif cnt == 1: # add to only one existing bouquet
 				self.addSubserviceToBouquet(self.bouquets[0][1])
-				self.session.open(MessageBox, _("Service has been added to the favourites."), MessageBox.TYPE_INFO)
+				self.session.open(MessageBox, _("Service has been added to the favourites."), MessageBox.TYPE_INFO, timeout=5)
 
 	def bouquetSelClosed(self, confirmed):
 		self.bsel = None
 		del self.selectedSubservice
 		if confirmed:
-			self.session.open(MessageBox, _("Service has been added to the selected bouquet."), MessageBox.TYPE_INFO)
+			self.session.open(MessageBox, _("Service has been added to the selected bouquet."), MessageBox.TYPE_INFO, timeout=5)
 
 	def addSubserviceToBouquet(self, dest):
 		self.servicelist.addServiceToBouquet(dest, self.selectedSubservice[1])
@@ -2746,10 +2786,7 @@ class VideoMode(Screen):
 		from Components.Converter.ServiceInfo import WIDESCREEN
 		service = self.session.nav.getCurrentService()
 		info = service and service.info()
-		try:
-			return info.getInfo(iServiceInformation.sAspect) in WIDESCREEN
-		except:
-			pass
+		return info.getInfo(iServiceInformation.sAspect) in WIDESCREEN
 
 	def quit(self):
 		self.Timer.stop()

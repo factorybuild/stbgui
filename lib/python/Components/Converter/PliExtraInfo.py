@@ -124,7 +124,7 @@ class PliExtraInfo(Poll, Converter, object):
 		return str(xres) + "x" + str(yres) + mode + fps
 
 	def createVideoCodec(self, info):
-		return ("MPEG2", "MPEG4", "MPEG1", "MPEG4-II", "VC1", "VC1-SM", "")[info.getInfo(iServiceInformation.sVideoType)]
+		return ("MPEG2", "AVC", "MPEG1", "MPEG4-VC", "VC1", "VC1-SM", "HEVC", "")[info.getInfo(iServiceInformation.sVideoType)]
 
 	def createPIDInfo(self, info):
 		vpid = info.getInfo(iServiceInformation.sVideoPID)
@@ -385,4 +385,3 @@ class PliExtraInfo(Poll, Converter, object):
 		elif what[0] == self.CHANGED_POLL and self.updateFEdata is not None:
 			self.updateFEdata = False
 			Converter.changed(self, what)
-

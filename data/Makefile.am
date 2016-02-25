@@ -21,12 +21,12 @@ dist_pkgdata_DATA = \
 if HAVE_TEXTLCD
 dist_pkgdata_DATA += skin_text.xml
 else
-if HAVE_COLORLCD
-dist_pkgdata_DATA += skin_display96.xml
-else
 dist_pkgdata_DATA += skin_display.xml
-endif
 endif
 
 skin_display.xml: $(srcdir)/skin_display_default.xml
 	test -f $(srcdir)/skin_display_$(BOXTYPE).xml && cp $(srcdir)/skin_display_$(BOXTYPE).xml skin_display.xml || cp $(srcdir)/skin_display_default.xml skin_display.xml
+
+skin_text.xml: $(srcdir)/skin_text_default.xml
+	test -f $(srcdir)/skin_text_$(BOXTYPE).xml && cp $(srcdir)/skin_text_$(BOXTYPE).xml skin_text.xml || cp $(srcdir)/skin_text_default.xml skin_text.xml
+

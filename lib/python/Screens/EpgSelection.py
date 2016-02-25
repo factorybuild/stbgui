@@ -47,6 +47,7 @@ class EPGSelection(Screen):
 		self.session = session
 		if isinstance(service, str) and eventid != None:
 			self.type = EPG_TYPE_SIMILAR
+			self.setTitle(_("Similar EPG"))
 			self["key_yellow"] = Button()
 			self["key_blue"] = Button()
 			self["key_red"] = Button()
@@ -54,6 +55,7 @@ class EPGSelection(Screen):
 			self.eventid = eventid
 			self.zapFunc = None
 		elif isinstance(service, eServiceReference) or isinstance(service, str):
+			self.setTitle(_("Single EPG"))
 			self.type = EPG_TYPE_SINGLE
 			self["key_yellow"] = Button()
 			self["key_blue"] = Button(_("Select Channel"))
@@ -62,6 +64,7 @@ class EPGSelection(Screen):
 			self.sort_type = 0
 			self.setSortDescription()
 		else:
+			self.setTitle(_("Multi EPG"))
 			self.skinName = "EPGSelectionMulti"
 			self.type = EPG_TYPE_MULTI
 			self["key_yellow"] = Button(pgettext("button label, 'previous screen'", "Prev"))
@@ -144,7 +147,7 @@ class EPGSelection(Screen):
 			def boxAction(choice):
 				if choice:
 					choice[1]()
-			self.session.openWithCallback(boxAction, ChoiceBox, title=text, list=menu)
+			self.session.openWithCallback(boxAction, ChoiceBox, title=text, list=menu, windowTitle=_("Further options"))
 
 	def runPlugin(self, plugin):
 		event = self["list"].getCurrent()
@@ -195,10 +198,9 @@ class EPGSelection(Screen):
 		elif self.type == EPG_TYPE_SINGLE:
 			service = self.currentService
 			self["Service"].newService(service.ref)
-			if self.saved_title is None:
+			if not self.saved_title:
 				self.saved_title = self.instance.getTitle()
-			title = self.saved_title + ' - ' + service.getServiceName()
-			self.instance.setTitle(title)
+			self.setTitle(self.saved_title + ' - ' + service.getServiceName())
 			l.fillSingleEPG(service)
 		else:
 			l.fillSimilarList(self.currentService, self.eventid)
@@ -305,7 +307,7 @@ class EPGSelection(Screen):
 	def runningEventCallback(self, t, state, result):
 		if result is not None and t.state == state:
 			findNextRunningEvent = True
-			findEventNext = False 
+			findEventNext = False
 			if result[1] == "nextonlystop":
 				findEventNext = True
 				t.disable()
@@ -351,7 +353,7 @@ class EPGSelection(Screen):
 			prev_state = timer.state
 			isRunning = prev_state in (1, 2)
 			title_text = isRepeat and _("Attention, this is repeated timer!\n") or ""
-			firstNextRepeatEvent = isRepeat and (begin < timer.begin <= end or timer.begin <= begin <= timer.end) and not timer.justplay 
+			firstNextRepeatEvent = isRepeat and (begin < timer.begin <= end or timer.begin <= begin <= timer.end) and not timer.justplay
 			menu = [(_("Delete timer"), "delete"),(_("Edit timer"), "edit")]
 			buttons = ["red", "green"]
 			if not isRunning:
@@ -369,7 +371,7 @@ class EPGSelection(Screen):
 					if choice[1] == "delete":
 						self.removeTimer(timer)
 					elif choice[1] == "edit":
-						self.session.open(TimerEntry, timer)
+						self.session.openWithCallback(self.finishedEdit, TimerEntry, timer)
 					elif choice[1] == "disable":
 						self.disableTimer(timer, prev_state)
 					elif choice[1] == "timereditlist":
@@ -382,6 +384,22 @@ class EPGSelection(Screen):
 		else:
 			newEntry = RecordTimerEntry(serviceref, checkOldTimers = True, dirname = preferredTimerPath(), *parseEvent(event))
 			self.session.openWithCallback(self.finishedAdd, TimerEntry, newEntry)
+
+	def finishedEdit(self, answer=None):
+		if answer[0]:
+			entry = answer[1]
+			simulTimerList = self.session.nav.RecordTimer.record(entry)
+			if simulTimerList is not None:
+				for x in simulTimerList:
+					if x.setAutoincreaseEnd(entry):
+						self.session.nav.RecordTimer.timeChanged(x)
+				simulTimerList = self.session.nav.RecordTimer.record(entry)
+				if simulTimerList is not None:
+					self.session.openWithCallback(self.finishedEdit, TimerSanityConflict, simulTimerList)
+					return
+				else:
+					self.session.nav.RecordTimer.timeChanged(entry)
+		self.onSelectionChanged()
 
 	def finishedAdd(self, answer):
 		print "finished add"
