@@ -23,7 +23,7 @@ class About(Screen):
 	def __init__(self, session):
 		Screen.__init__(self, session)
 		self.setTitle(_("About"))
-		hddsplit, = skin.parameters.get("AboutHddSplit", (0,))
+		hddsplit = skin.parameters.get("AboutHddSplit", 0)
 
 		AboutText = _("Model:%s %s\n") % (getMachineBrand(), getMachineName())
 		AboutText = _("Hardware: ") + about.getHardwareTypeString() + "\n"
@@ -53,7 +53,7 @@ class About(Screen):
 		if fp_version is None:
 			fp_version = ""
 		else:
-			fp_version = _("Frontprocessor version: %d") % fp_version
+			fp_version = _("Frontprocessor version: %s") % fp_version
 			AboutText += fp_version + "\n"
 
 		self["FPVersion"] = StaticText(fp_version)
@@ -87,7 +87,10 @@ class About(Screen):
 		else:
 			hddinfo = _("none")
 		self["hddA"] = StaticText(hddinfo)
-		AboutText += hddinfo
+		AboutText += hddinfo + "\n\n" + _("Network Info:")
+		for x in about.GetIPsFromNetworkInterfaces():
+			AboutText += "\n" + x[0] + ": " + x[1]
+
 		self["AboutScrollLabel"] = ScrollLabel(AboutText)
 		self["key_green"] = Button(_("Translations"))
 		self["key_red"] = Button(_("Latest Commits"))
@@ -116,6 +119,7 @@ class About(Screen):
 class TranslationInfo(Screen):
 	def __init__(self, session):
 		Screen.__init__(self, session)
+		self.setTitle(_("Translation"))
 		# don't remove the string out of the _(), or it can't be "translated" anymore.
 
 		# TRANSLATORS: Add here whatever should be shown in the "translator" about screen, up to 6 lines (use \n for newline)
@@ -152,6 +156,7 @@ class TranslationInfo(Screen):
 class CommitInfo(Screen):
 	def __init__(self, session):
 		Screen.__init__(self, session)
+		self.setTitle(_("Latest Commits"))
 		self.skinName = ["CommitInfo", "About"]
 		self["AboutScrollLabel"] = ScrollLabel(_("Please wait"))
 
@@ -194,7 +199,13 @@ class CommitInfo(Screen):
 			commitlog += 80 * '-' + '\n'
 			commitlog += url.split('/')[-2] + '\n'
 			commitlog += 80 * '-' + '\n'
-			for c in loads(urlopen(url, timeout=5).read()):
+			try:
+				# OpenPli 5.0 uses python 2.7.11 and here we need to bypass the certificate check
+				from ssl import _create_unverified_context
+				log = loads(urlopen(url, timeout=5, context=_create_unverified_context()).read())
+			except:
+				log = loads(urlopen(url, timeout=5).read())
+			for c in log:
 				creator = c['commit']['author']['name']
 				title = c['commit']['message']
 				date = datetime.strptime(c['commit']['committer']['date'], '%Y-%m-%dT%H:%M:%SZ').strftime('%x %X')
@@ -248,7 +259,7 @@ class MemoryInfo(Screen):
 
 		self["params"] = MemoryInfoSkinParams()
 
-		self['info'] = Label(_("This info is for developers only.\nFor a normal users it is not important.\nDon't panic, please, when here will be displayed any suspicious informations!"))
+		self['info'] = Label(_("This info is for developers only.\nFor a normal users it is not relevant.\nDon't panic please when you see values being displayed that you think look suspicious!"))
 
 		self.setTitle(_("Memory Info"))
 		self.onLayoutFinish.append(self.getMemoryInfo)

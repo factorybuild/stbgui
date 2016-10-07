@@ -161,6 +161,9 @@ class EventViewBase:
 						elif entry.begin == conflict_end:
 							entry.begin += 30
 							change_time = True
+						elif entry.begin == conflict_begin and (entry.service_ref and entry.service_ref.ref and entry.service_ref.ref.flags & eServiceReference.isGroup):
+							entry.begin += 30
+							change_time = True
 						if change_time:
 							simulTimerList = self.session.nav.RecordTimer.record(entry)
 					if simulTimerList is not None:
@@ -289,7 +292,7 @@ class EventViewBase:
 				def boxAction(choice):
 					if choice:
 						choice[1]()
-				text += _(": %s") % self.event.getEventName()
+				text += ": %s" % self.event.getEventName()
 				self.session.openWithCallback(boxAction, ChoiceBox, title=text, list=menu, windowTitle=_("Event view context menu"))
 
 	def runPlugin(self, plugin):
@@ -305,11 +308,23 @@ class EventViewEPGSelect(Screen, EventViewBase):
 	def __init__(self, session, Event, Ref, callback=None, singleEPGCB=None, multiEPGCB=None, similarEPGCB=None):
 		Screen.__init__(self, session)
 		self.skinName = "EventView"
+		self.singleEPGCB = singleEPGCB
+		self.multiEPGCB = multiEPGCB
 		EventViewBase.__init__(self, Event, Ref, callback, similarEPGCB)
 		self["key_yellow"].setText(_("Single EPG"))
 		self["key_blue"].setText(_("Multi EPG"))
 		self["epgactions"] = ActionMap(["EventViewEPGActions"],
 			{
-				"openSingleServiceEPG": singleEPGCB,
-				"openMultiServiceEPG": multiEPGCB,
+				"openSingleServiceEPG": self.openSingleEPG,
+				"openMultiServiceEPG": self.openMultiEPG,
 			})
+
+	def openSingleEPG(self):
+		self.hide()
+		self.singleEPGCB()
+		self.close()
+
+	def openMultiEPG(self):
+		self.hide()
+		self.multiEPGCB()
+		self.close()

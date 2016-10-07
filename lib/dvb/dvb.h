@@ -142,7 +142,7 @@ private:
 	std::string virtualFrontendName;
 	bool running;
 	unsigned short int pidList[30];
-	unsigned char buffer[(188 / 4) * 4096];
+	unsigned char buffer[4 * 1024 * 188];
 	pthread_t pumpThread;
 	static void *threadproc(void *arg);
 	void *vtunerPump();
@@ -241,6 +241,8 @@ public:
 	SWIG_VOID(RESULT) allocateRawChannel(eUsePtr<iDVBChannel> &SWIG_OUTPUT, int slot_index);
 	PyObject *setFrontendSlotInformations(SWIG_PYOBJECT(ePyObject) list);
 	bool frontendIsCompatible(int index, const char *type);
+	bool frontendIsMultistream(int index);
+	std::string getFrontendCapabilities(int index);
 	void setFrontendType(int index, const char *type);
 };
 SWIG_TEMPLATE_TYPEDEF(ePtr<eDVBResourceManager>, eDVBResourceManager);

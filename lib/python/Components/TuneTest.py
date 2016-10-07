@@ -1,4 +1,4 @@
-from enigma import eDVBFrontendParametersSatellite, eDVBFrontendParametersTerrestrial, eDVBFrontendParametersCable, eDVBFrontendParameters, eDVBResourceManager, eTimer
+from enigma import eDVBFrontendParametersSatellite, eDVBFrontendParametersTerrestrial, eDVBFrontendParametersCable, eDVBFrontendParametersATSC, eDVBFrontendParameters, eDVBResourceManager, eTimer
 
 class Tuner:
 	def __init__(self, frontend, ignore_rotor=False):
@@ -33,9 +33,9 @@ class Tuner:
 	def tuneTerr(self, frequency,
 		inversion=2, bandwidth = 7000000, fechigh = 6, feclow = 6,
 		modulation = 2, transmission = 2, guard = 4,
-		hierarchy = 4, system = 0, plpid = 0):
+		hierarchy = 4, system = 0, plp_id = 0):
 		if self.frontend:
-			print "[TuneTest] tuning to transponder with data", [frequency, inversion, bandwidth, fechigh, feclow, modulation, transmission, guard, hierarchy, system, plpid]
+			print "[TuneTest] tuning to transponder with data", [frequency, inversion, bandwidth, fechigh, feclow, modulation, transmission, guard, hierarchy, system, plp_id]
 			parm = eDVBFrontendParametersTerrestrial()
 			parm.frequency = frequency
 			parm.inversion = inversion
@@ -47,7 +47,7 @@ class Tuner:
 			parm.guard_interval = guard
 			parm.hierarchy = hierarchy
 			parm.system = system
-			parm.plpid = plpid
+			parm.plp_id = plp_id
 			self.tuneTerrObj(parm)
 
 	def tuneTerrObj(self, transponderObj):
@@ -73,6 +73,23 @@ class Tuner:
 		if self.frontend:
 			feparm = eDVBFrontendParameters()
 			feparm.setDVBC(transponderObj)
+			self.lastparm = feparm
+			self.frontend.tune(feparm)
+
+	def tuneATSC(self, transponder):
+		if self.frontend:
+			print "[TuneTest] tuning to transponder with data", transponder
+			parm = eDVBFrontendParametersATSC()
+			parm.frequency = transponder[0]
+			parm.modulation = transponder[1]
+			parm.inversion = transponder[2]
+			parm.system = transponder[3]
+			self.tuneATSCObj(parm)
+
+	def tuneATSCObj(self, transponderObj):
+		if self.frontend:
+			feparm = eDVBFrontendParameters()
+			feparm.setATSC(transponderObj)
 			self.lastparm = feparm
 			self.frontend.tune(feparm)
 

@@ -13,6 +13,7 @@ from Tools.Directories import resolveFilename, SCOPE_SKIN, SCOPE_FONTS, SCOPE_CU
 from Tools.Import import my_import
 from Tools.LoadPixmap import LoadPixmap
 from Components.RcModel import rc_model
+from Components.SystemInfo import SystemInfo
 
 colorNames = {}
 # Predefined fonts, typically used in built-in screens and for components like
@@ -117,33 +118,55 @@ except Exception, err:
 addSkin('skin_default.xml')
 profile("LoadSkinDefaultDone")
 
+#
+# Convert a string into a number. Used to convert object position and size attributes into a number
+#    s is the input string.
+#    e is the the parent object size to do relative calculations on parent
+#    size is the size of the object size (e.g. width or height)
+#    font is a font object to calculate relative to font sizes
+# Note some constructs for speeding # up simple cases that are very common.
+# Can do things like:  10+center-10w+4%
+# To center the widget on the parent widget,
+#    but move forward 10 pixels and 4% of parent width
+#    and 10 character widths backward
+# Multiplication, division and subexprsssions are also allowed: 3*(e-c/2)
+#
+# Usage:  center : center the object on parent based on parent size and object size
+#         e      : take the parent size/width
+#         c      : take the center point of parent size/width
+#         %      : take given percentag of parent size/width
+#         w      : multiply by current font width
+#         h      : multiply by current font height
+#
 def parseCoordinate(s, e, size=0, font=None):
 	s = s.strip()
-	if s == "center":
+	if s == "center":		# for speed, can be common case
 		val = (e - size)/2
 	elif s == '*':
-	        return None
+		return None
 	else:
-		if s[0] is 'e':
-			val = e
-			s = s[1:]
-		elif s[0] is 'c':
-			val = e/2
-			s = s[1:]
-		else:
-			val = 0;
-		if s:
-			if s[-1] is '%':
-				val += e * int(s[:-1]) / 100
-			elif s[-1] is 'w':
-			        val += fonts[font][3] * int(s[:-1]);
-			elif s[-1] is 'h':
-			        val += fonts[font][2] * int(s[:-1]);
-			else:
-				val += int(s)
+		try:
+			val = int(s)	# for speed
+		except:
+			if 't' in s:
+				s = s.replace("center", str((e-size)/2.0))
+			if 'e' in s:
+				s = s.replace("e", str(e))
+			if 'c' in s:
+				s = s.replace("c", str(e/2.0))
+			if 'w' in s:
+				s = s.replace("w", "*" + str(fonts[font][3]))
+			if 'h' in s:
+				s = s.replace("h", "*" + str(fonts[font][2]))
+			if '%' in s:
+				s = s.replace("%", "*" + str(e/100.0))
+			try:
+				val = int(s) # for speed
+			except:
+				val = eval(s)
 	if val < 0:
-		val = 0
-	return val
+		return 0
+	return int(val)  # make sure an integer value is returned
 
 
 def getParentSize(object, desktop):
@@ -166,23 +189,23 @@ def getParentSize(object, desktop):
 			size = desktop.size()
 	return size
 
-def parsePosition(s, scale, object = None, desktop = None, size = None):
+def parseValuePair(s, scale, object = None, desktop = None, size = None):
 	x, y = s.split(',')
 	parentsize = eSize()
-	if object and (x[0] in ('c', 'e') or y[0] in ('c', 'e')):
+	if object and ('c' in x or 'c' in y or 'e' in x or 'e' in y or
+	               '%' in x or '%' in y):          # need parent size for ce%
 		parentsize = getParentSize(object, desktop)
-	xval = parseCoordinate(x, parentsize.width(), size and size.width())
-	yval = parseCoordinate(y, parentsize.height(), size and size.height())
-	return ePoint(xval * scale[0][0] / scale[0][1], yval * scale[1][0] / scale[1][1])
+	xval = parseCoordinate(x, parentsize.width(), size and size.width() or 0)
+	yval = parseCoordinate(y, parentsize.height(), size and size.height() or 0)
+	return (xval * scale[0][0] / scale[0][1], yval * scale[1][0] / scale[1][1])
+
+def parsePosition(s, scale, object = None, desktop = None, size = None):
+	(x, y) = parseValuePair(s, scale, object, desktop, size)
+	return ePoint(x, y)
 
 def parseSize(s, scale, object = None, desktop = None):
-	x, y = s.split(',')
-	parentsize = eSize()
-	if object and (x[0] in ('c', 'e') or y[0] in ('c', 'e')):
-		parentsize = getParentSize(object, desktop)
-	xval = parseCoordinate(x, parentsize.width())
-	yval = parseCoordinate(y, parentsize.height())
-	return eSize(xval * scale[0][0] / scale[0][1], yval * scale[1][0] / scale[1][1])
+	(x, y) = parseValuePair(s, scale, object, desktop)
+	return eSize(x, y)
 
 def parseFont(s, scale):
 	try:
@@ -433,6 +456,54 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 				if bpp != 32:
 					# load palette (not yet implemented)
 					pass
+				if yres >= 1080:
+					parameters["FileListName"] = (68,4,1000,34)
+					parameters["FileListIcon"] = (7,4,52,37)
+					parameters["FileListMultiName"] = (90,3,1000,32)
+					parameters["FileListMultiIcon"] = (45, 4, 30, 30)
+					parameters["FileListMultiLock"] = (2,0,36,36)
+					parameters["ChoicelistDash"] = (0,3,1000,30)
+					parameters["ChoicelistName"] = (68,3,1000,30)
+					parameters["ChoicelistIcon"] = (7,0,52,38)
+					parameters["PluginBrowserName"] = (180,8,38)
+					parameters["PluginBrowserDescr"] = (180,42,25)
+					parameters["PluginBrowserIcon"] = (15,8,150,60)
+					parameters["PluginBrowserDownloadName"] = (120,8,38)
+					parameters["PluginBrowserDownloadDescr"] = (120,42,25)
+					parameters["PluginBrowserDownloadIcon"] = (15,0,90,76)
+					parameters["ServiceInfo"] = (0,0,450,50)
+					parameters["ServiceInfoLeft"] = (0,0,450,45)
+					parameters["ServiceInfoRight"] = (450,0,1000,45)
+					parameters["SelectionListDescr"] = (45,3,1000,32)
+					parameters["SelectionListLock"] = (0,2,36,36)
+					parameters["ConfigListSeperator"] = 300
+					parameters["VirtualKeyboard"] = (68,68)
+					parameters["PartnerBoxEntryListName"] = (8,2,225,38)
+					parameters["PartnerBoxEntryListIP"] = (180,2,225,38)
+					parameters["PartnerBoxEntryListPort"] = (405,2,150,38)
+					parameters["PartnerBoxEntryListType"] = (615,2,150,38)
+					parameters["PartnerBoxTimerServicename"] = (0,0,45)
+					parameters["PartnerBoxTimerName"] = (0,42,30)
+					parameters["PartnerBoxE1TimerTime"] = (0,78,255,30)
+					parameters["PartnerBoxE1TimerState"] = (255,78,255,30)
+					parameters["PartnerBoxE2TimerTime"] = (0,78,225,30)
+					parameters["PartnerBoxE2TimerState"] = (225,78,225,30)
+					parameters["PartnerBoxE2TimerIcon"] = (1050,8,20,20)
+					parameters["PartnerBoxE2TimerIconRepeat"] = (1050,38,20,20)
+					parameters["PartnerBoxBouquetListName"] = (0,0,45)
+					parameters["PartnerBoxChannelListName"] = (0,0,45)
+					parameters["PartnerBoxChannelListTitle"] = (0,42,30)
+					parameters["PartnerBoxChannelListTime"] = (0,78,225,30)
+					parameters["HelpMenuListHlp"] = (0,0,900,42)
+					parameters["HelpMenuListExtHlp0"] = (0,0,900,39)
+					parameters["HelpMenuListExtHlp1"] = (0,42,900,30)
+					parameters["AboutHddSplit"] = 1
+					parameters["DreamexplorerName"] = (62,0,1200,38)
+					parameters["DreamexplorerIcon"] = (15,4,30,30)
+					parameters["PicturePlayerThumb"] = (30,285,45,300,30,25)
+					parameters["PlayListName"] = (38,2,1000,34)
+					parameters["PlayListIcon"] = (7,7,24,24)
+					parameters["SHOUTcastListItem"] = (30,27,35,96,35,33,60,32)
 
 	for skininclude in skin.findall("include"):
 		filename = skininclude.attrib.get("filename")
@@ -497,7 +568,7 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 			try:
 				name = get("name")
 				value = get("value")
-				parameters[name] = map(int, value.split(","))
+				parameters[name] = "," in value and map(int, value.split(",")) or int(value)
 			except Exception, ex:
 				print "[SKIN] bad parameter", ex
 

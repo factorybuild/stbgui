@@ -522,6 +522,9 @@ eServiceMP3::eServiceMP3(eServiceReference ref):
 
 	if ( m_sourceinfo.is_streaming )
 	{
+		if (eConfigManager::getConfigBoolValue("config.mediaplayer.useAlternateUserAgent"))
+			m_useragent = eConfigManager::getConfigValue("config.mediaplayer.alternateUserAgent");
+
 		uri = g_strdup_printf ("%s", filename);
 
 		if ( m_ref.getData(7) & BUFFERING_ENABLED )
@@ -902,8 +905,12 @@ RESULT eServiceMP3::seekToImpl(pts_t to)
 
 	if (m_paused)
 	{
+#if GST_VERSION_MAJOR < 1
 		m_seek_paused = true;
 		gst_element_set_state(m_gst_playbin, GST_STATE_PLAYING);
+#else
+		m_event((iPlayableService*)this, evUpdatedInfo);
+#endif
 	}
 
 	return 0;
@@ -1048,6 +1055,77 @@ gint eServiceMP3::match_sinktype(const GValue *velement, const gchar *type)
 }
 #endif
 
+#if HAVE_AMLOGIC
+GstElement *getAVDecElement(GstElement *m_gst_playbin, int i, int flag)
+{
+	GstPad *pad = NULL;
+	GstPad *dec_pad = NULL;
+	GstElement *e = NULL;
+
+	g_signal_emit_by_name(m_gst_playbin, flag ? "get-video-pad" : "get-audio-pad", i, &pad);
+	if (pad) {
+		dec_pad = gst_pad_get_peer(pad);
+		while (dec_pad && GST_IS_GHOST_PAD(dec_pad)) {
+			gst_object_unref(dec_pad);
+			dec_pad = gst_ghost_pad_get_target(GST_GHOST_PAD(dec_pad));
+		}
+		if (dec_pad) {
+			e = gst_pad_get_parent_element(dec_pad);
+			gst_object_unref(dec_pad);
+		}
+		gst_object_unref(pad);
+	}
+
+	if (!e)
+		eDebug("[eServiceMP3] no %sDecElement", flag ? "Video" : "Audio");
+
+	return e;
+}
+
+void eServiceMP3::AmlSwitchAudio(int index)
+{
+	gint i, n_audio = 0;
+	gint32 videonum = 0;
+	GstElement * adec = NULL, *vdec = NULL;
+
+	g_object_get(G_OBJECT (m_gst_playbin), "n-audio", &n_audio, NULL);
+	for (i = 0; i < n_audio; i++) {
+		adec = getAVDecElement(m_gst_playbin, i, 0);
+		if (adec) {
+			g_object_set(G_OBJECT(adec), "pass-through", TRUE, NULL);
+			gst_object_unref(adec);
+		}
+	}
+	adec = getAVDecElement(m_gst_playbin, index, 0);
+	if (adec) {
+		g_object_set(G_OBJECT(adec), "pass-through", FALSE, NULL);
+		gst_object_unref(adec);
+	}
+	g_object_get(G_OBJECT (m_gst_playbin), "current-video", &videonum, NULL);
+	vdec = getAVDecElement(m_gst_playbin, videonum, 1);
+	if (vdec)
+		g_object_set(G_OBJECT(vdec), "pass-through", TRUE, NULL);
+}
+
+unsigned int eServiceMP3::get_pts_pcrscr(void)
+{
+	int handle;
+	int size;
+	char s[16];
+	unsigned int value = 0;
+
+	handle = open("/sys/class/tsync/pts_pcrscr", O_RDONLY);
+	if (handle < 0)
+		return value;
+
+	size = read(handle, s, sizeof(s));
+	if (size > 0)
+		value = strtoul(s, NULL, 16);
+	close(handle);
+	return value;
+}
+#endif
+
 RESULT eServiceMP3::getPlayPosition(pts_t &pts)
 {
 	gint64 pos;
@@ -1056,11 +1134,20 @@ RESULT eServiceMP3::getPlayPosition(pts_t &pts)
 	if (!m_gst_playbin || m_state != stRunning)
 		return -1;
 
+#if HAVE_AMLOGIC
+	if ((pos = get_pts_pcrscr()) > 0)
+		pos *= 11111LL;
+#else
+#if GST_VERSION_MAJOR < 1
 	if (audioSink || videoSink)
+#else
+	if ((audioSink || videoSink) && !m_paused)
+#endif
 	{
 		g_signal_emit_by_name(audioSink ? audioSink : videoSink, "get-decoder-time", &pos);
 		if (!GST_CLOCK_TIME_IS_VALID(pos)) return -1;
 	}
+#endif
 	else
 	{
 		GstFormat fmt = GST_FORMAT_TIME;
@@ -1493,24 +1580,22 @@ RESULT eServiceMP3::selectTrack(unsigned int i)
 		if (ppos < 0)
 			ppos = 0;
 	}
-
-	int ret = selectAudioStream(i);
-	if (!ret)
+	if (validposition)
 	{
-		if (validposition)
-		{
-			/* flush */
-			seekTo(ppos);
-		}
+		/* flush */
+		seekTo(ppos);
 	}
-
-	return ret;
+	return selectAudioStream(i);
 }
 
 int eServiceMP3::selectAudioStream(int i)
 {
 	int current_audio;
 	g_object_set (G_OBJECT (m_gst_playbin), "current-audio", i, NULL);
+#if HAVE_AMLOGIC
+	if (m_currentAudioStream != i)
+		AmlSwitchAudio(i);
+#endif
 	g_object_get (G_OBJECT (m_gst_playbin), "current-audio", &current_audio, NULL);
 	if ( current_audio == i )
 	{
@@ -1738,13 +1823,7 @@ void eServiceMP3::gstBusCall(GstMessage *msg)
 				case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
 				{
 					m_paused = false;
-					if (m_seek_paused)
-					{
-						m_seek_paused = false;
-						gst_element_set_state(m_gst_playbin, GST_STATE_PAUSED);
-					}
-					else
-						m_event((iPlayableService*)this, evGstreamerPlayStarted);
+					m_event((iPlayableService*)this, evGstreamerPlayStarted);
 				}	break;
 				case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
 				{
@@ -1937,6 +2016,7 @@ void eServiceMP3::gstBusCall(GstMessage *msg)
 #else
 				GstCaps* caps = gst_pad_get_current_caps(pad);
 #endif
+				gst_object_unref(pad);
 				if (!caps)
 					continue;
 				GstStructure* str = gst_caps_get_structure(caps, 0);
@@ -2001,10 +2081,17 @@ void eServiceMP3::gstBusCall(GstMessage *msg)
 					g_signal_connect (G_OBJECT (pad), "notify::caps", G_CALLBACK (gstTextpadHasCAPS), this);
 
 				subs.type = getSubtitleType(pad, g_codec);
+				gst_object_unref(pad);
 				g_free(g_codec);
 				m_subtitleStreams.push_back(subs);
 			}
+
 			m_event((iPlayableService*)this, evUpdatedInfo);
+			if (m_seek_paused)
+			{
+				m_seek_paused = false;
+				gst_element_set_state(m_gst_playbin, GST_STATE_PAUSED);
+			}
 
 			if ( m_errorInfo.missing_codec != "" )
 			{
@@ -2466,6 +2553,7 @@ void eServiceMP3::gstTextpadHasCAPS_synced(GstPad *pad)
 					subs.language_code = std::string(g_lang);
 					g_free(g_lang);
 				}
+				gst_tag_list_free(tags);
 			}
 
 			if (m_currentSubtitleStream >= 0 && m_currentSubtitleStream < (int)m_subtitleStreams.size())
@@ -2517,6 +2605,10 @@ void eServiceMP3::pullSubtitle(GstBuffer *buffer)
 #else
 				std::string line((const char*)map.data, len);
 #endif
+				// some media muxers do add an extra new line at the end off a muxed/reencoded srt to ssa codec
+				if (!line.empty() && line[line.length()-1] == '\n')
+					line.erase(line.length()-1);
+
 				eLog(6, "[eServiceMP3] got new text subtitle @ buf_pos = %lld ns (in pts=%lld), dur=%lld: '%s' ", buf_pos, buf_pos/11111, duration_ns, line.c_str());
 
 				uint32_t start_ms = ((buf_pos / 1000000ULL) * convert_fps) + (delay / 90);

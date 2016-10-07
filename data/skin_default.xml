@@ -489,6 +489,14 @@ self.autoResize()
 			</widget>
 		</panel>
 	</screen>
+	<screen name="InstallWizardIpkgUpdater" position="fill" flags="wfNoBorder">
+		<panel name="WizardMarginsTemplate"/>
+		<panel position="top" size="*,100"/>
+		<panel name="RemoteControlTemplate"/>
+		<panel position="left" size="10,*"/>
+		<panel position="right" size="10,*"/>
+		<widget source="statusbar" render="Label" position="fill" zPosition="10" halign="center" valign="center" font="Regular;20" transparent="1"/>
+	</screen>
 	<!-- Location Box -->
 	<screen name="LocationBox" position="center,center" size="540,460">
 		<widget name="text" position="0,2" size="540,22" font="Regular;22"/>
@@ -531,6 +539,20 @@ self.autoResize()
 	<screen name="Menu" position="center,center" size="380,285" title="Main menu">
 		<widget source="title" render="Label" position="10,10" size="360,35" font="Regular;23"/>
 		<widget source="menu" render="Listbox" position="10,55" size="360,225" scrollbarMode="showOnDemand">
+			<convert type="StringList"/>
+		</widget>
+	</screen>
+	<screen name="MenuSort" position="center,center" size="560,285" title="Main menu">
+		<ePixmap pixmap="skin_default/buttons/red.png" position="0,0" size="140,40" alphatest="on"/>
+		<ePixmap pixmap="skin_default/buttons/green.png" position="140,0" size="140,40" alphatest="on"/>
+		<ePixmap pixmap="skin_default/buttons/yellow.png" position="280,0" size="140,40" alphatest="on"/>
+		<ePixmap pixmap="skin_default/buttons/blue.png" position="420,0" size="140,40" alphatest="on"/>
+		<widget name="key_red" position="0,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#9f1313" transparent="1"/>
+		<widget name="key_green" position="140,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#1f771f" transparent="1"/>
+		<widget name="key_yellow" position="280,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#a08500" transparent="1"/>
+		<widget name="key_blue" position="420,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#18188b" transparent="1"/>
+		<widget source="title" render="Label" position="10,45" size="540,35" font="Regular;23"/>
+		<widget source="menu" render="Listbox" position="10,80" size="360,225" scrollbarMode="showOnDemand">
 			<convert type="StringList"/>
 		</widget>
 	</screen>
@@ -954,7 +976,7 @@ self.instance.move(ePoint(orgpos.x() + (orgwidth - newwidth)/2, orgpos.y() + (or
 		<widget name="list" position="120,10" size="420,180" transparent="1" font="Regular;20"/>
 		<eLabel position="0,190" size="165,100" backgroundColor="red"/>
 		<eLabel position="165,190" size="165,100" backgroundColor="green"/>
-		<eLabel position="330,190" size="165,100" backgroundColor="yellow"/>
+		<eLabel position="330,190" size="165,100" backgroundColor="#00bab329"/>
 		<eLabel position="495,190" size="165,100" backgroundColor="blue"/>
 
 		<widget name="key_red" position="0,190" size="165,90" zPosition="1" halign="center" valign="center" font="Regular;20"  foregroundColor="white" transparent="1"/>
@@ -1147,7 +1169,7 @@ self.instance.move(ePoint(orgpos.x() + (orgwidth - newwidth)/2, orgpos.y() + (or
 		<widget name="apply" position="10,240" size="250,35"/>
 	</screen>
 	<!-- Timer edit list -->
-	<screen name="TimerEditList" position="center,center" size="560,430" title="Timer editor">
+	<screen name="TimerEditList" position="center,center" size="560,450" title="Timer overview">
 		<ePixmap pixmap="skin_default/buttons/red.png" position="0,0" size="140,40" alphatest="on"/>
 		<ePixmap pixmap="skin_default/buttons/green.png" position="140,0" size="140,40" alphatest="on"/>
 		<ePixmap pixmap="skin_default/buttons/yellow.png" position="280,0" size="140,40" alphatest="on"/>
@@ -1156,7 +1178,8 @@ self.instance.move(ePoint(orgpos.x() + (orgwidth - newwidth)/2, orgpos.y() + (or
 		<widget name="key_green" position="140,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#1f771f" transparent="1"/>
 		<widget name="key_yellow" position="280,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#a08500" transparent="1"/>
 		<widget name="key_blue" position="420,0" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#18188b" transparent="1"/>
-		<widget name="timerlist" position="0,60" size="560,350" scrollbarMode="showOnDemand"/>
+		<widget name="timerlist" position="0,60" size="560,300" scrollbarMode="showOnDemand"/>
+		<widget name="description" position="0,370" zPosition="1" size="560,80" font="Regular;18" transparent="1"/>
 	</screen>
 	<!-- Timer entry -->
 	<screen name="TimerEntry" position="center,center" size="560,440" title="Timer entry">

@@ -51,7 +51,7 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 				"showRadio": (self.showRadio, _("Show the radio player...")),
 				"showTv": (self.showTv, _("Show the tv player...")),
 				"showWWW": (self.showWWW, _("Open WebBrowser...")),
-				"toogleTvRadio": (self.toogleTvRadio, _("toggels betwenn tv and radio...")),
+				"toogleTvRadio": (self.toggleTvRadio, _("toggels betwenn tv and radio...")),
 				"openSleepTimer": (self.openSleepTimer, _("Show the Sleep Timer...")),
 				"showMediaPlayer": (self.showMediaPlayer, _("Show the media player...")),
 				"openTimerList": (self.openTimerList, _("Show the tv player...")),
@@ -63,8 +63,8 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 				"showPortal": (self.showPORTAL, _("Open MediaPortal...")),
 			}, prio=2)
 
-		self.allowPiP = True
 		self.radioTV = 0
+		self.allowPiP = True
 
 		for x in HelpableScreen, \
 				InfoBarBase, InfoBarShowHide, \
@@ -129,11 +129,11 @@ class InfoBar(InfoBarBase, InfoBarShowHide,
 			from Screens.ChannelSelection import ChannelSelectionRadio
 			self.session.openWithCallback(self.ChannelSelectionRadioClosed, ChannelSelectionRadio, self)
 
-	def toogleTvRadio(self): 
+	def toggleTvRadio(self):
 		if self.radioTV == 1:
 			self.radioTV = 0
-			self.showTv() 
-		else: 
+			self.showTv()
+		else:
 			self.radioTV = 1
 			self.showRadio()
 
@@ -279,7 +279,7 @@ class MoviePlayer(InfoBarBase, InfoBarShowHide, InfoBarMenu, InfoBarSeek, InfoBa
 		if not config.movielist.stop_service.value:
 			Screens.InfoBar.InfoBar.instance.callServiceStarted()
 		self.session.nav.playService(self.lastservice)
-		config.usage.last_movie_played.value = self.cur_service.toString()
+		config.usage.last_movie_played.value = self.cur_service and self.cur_service.toString() or ""
 		config.usage.last_movie_played.save()
 
 	def standbyCountChanged(self, value):

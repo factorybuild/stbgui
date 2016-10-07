@@ -38,8 +38,7 @@ from ServiceReference import ServiceReference, isPlayableForCur
 from Tools import Notifications, ASCIItranslit
 from Tools.Directories import fileExists, getRecordingFilename, moveFiles
 
-from enigma import eTimer, eServiceCenter, eDVBServicePMTHandler, iServiceInformation, \
-	iPlayableService, eServiceReference, eEPGCache, eActionMap
+from enigma import eTimer, eServiceCenter, eDVBServicePMTHandler, iServiceInformation, iPlayableService, eServiceReference, eEPGCache, eActionMap, getDesktop, eDVBDB
 
 from time import time, localtime, strftime
 import os
@@ -209,6 +208,11 @@ class InfoBarScreenSaver:
 			self.ScreenSaverTimerStart()
 			eActionMap.getInstance().unbindAction('', self.keypressScreenSaver)
 
+class HideVBILine(Screen):
+	def __init__(self, session):
+		self.skin = """<screen position="0,0" size="%s,%s" flags="wfNoBorder" zPosition="1"/>""" % (getDesktop(0).size().width(), getDesktop(0).size().height() / 360 + 1)
+		Screen.__init__(self, session)
+
 class SecondInfoBar(Screen):
 	def __init__(self, session, skinName):
 		Screen.__init__(self, session)
@@ -221,6 +225,7 @@ class InfoBarShowHide(InfoBarScreenSaver):
 	STATE_HIDING = 1
 	STATE_SHOWING = 2
 	STATE_SHOWN = 3
+	FLAG_HIDE_VBI = 512
 
 	def __init__(self):
 		self["ShowHideActions"] = ActionMap( ["InfobarShowHideActions"] ,
@@ -257,12 +262,21 @@ class InfoBarShowHide(InfoBarScreenSaver):
 			self.secondInfoBarScreenSimple.show()
 			self.actualSecondInfoBarScreen = config.usage.show_simple_second_infobar.value and self.secondInfoBarScreenSimple.skinAttributes and self.secondInfoBarScreenSimple or self.secondInfoBarScreen
 
+		self.hideVBILineScreen = self.session.instantiateDialog(HideVBILine)
+		self.hideVBILineScreen.show()
+
 		self.onLayoutFinish.append(self.__layoutFinished)
+		self.onExecBegin.append(self.__onExecBegin)
+
+	def __onExecBegin(self):
+		self.clearScreenPath()
+		self.showHideVBI()
 
 	def __layoutFinished(self):
 		if self.actualSecondInfoBarScreen:
 			self.secondInfoBarScreen.hide()
 			self.secondInfoBarScreenSimple.hide()
+		self.hideVBILineScreen.hide()
 
 	def __onShow(self):
 		self.__state = self.STATE_SHOWN
@@ -320,6 +334,7 @@ class InfoBarShowHide(InfoBarScreenSaver):
 		if self.execing:
 			if config.usage.show_infobar_on_zap.value:
 				self.doShow()
+		self.showHideVBI()
 
 	def startHideTimer(self):
 		if self.__state == self.STATE_SHOWN and not self.__locked:
@@ -342,6 +357,8 @@ class InfoBarShowHide(InfoBarScreenSaver):
 
 	def okButtonCheck(self):
 		if config.usage.ok_is_channelselection.value and hasattr(self, "openServiceList"):
+			if isinstance(self, InfoBarTimeshift) and self.timeshiftEnabled() and isinstance(self, InfoBarSeek) and self.seekstate == self.SEEK_STATE_PAUSE:
+				return
 			self.openServiceList()
 		else:
 			self.toggleShow()
@@ -382,6 +399,37 @@ class InfoBarShowHide(InfoBarScreenSaver):
 		self.__locked = self.__locked - 1
 		if self.execing:
 			self.startHideTimer()
+
+	def checkHideVBI(self):
+		service = self.session.nav.getCurrentlyPlayingServiceReference()
+		servicepath = service and service.getPath()
+		if servicepath and servicepath.startswith("/"):
+			if service.toString().startswith("1:"):
+				info = eServiceCenter.getInstance().info(service)
+				service = info and info.getInfoString(service, iServiceInformation.sServiceref)
+				return service and eDVBDB.getInstance().getFlag(eServiceReference(service)) & self.FLAG_HIDE_VBI and True
+			else:
+				return ".hidvbi." in servicepath.lower()
+		service = self.session.nav.getCurrentService()
+		info = service and service.info()
+		return info and info.getInfo(iServiceInformation.sHideVBI)
+
+	def showHideVBI(self):
+		if self.checkHideVBI():
+			self.hideVBILineScreen.show()
+		else:
+			self.hideVBILineScreen.hide()
+
+	def ToggleHideVBI(self):
+		service = self.session.nav.getCurrentlyPlayingServiceReference()
+		servicepath = service and service.getPath()
+		if not servicepath:
+			if eDVBDB.getInstance().getFlag(service) & self.FLAG_HIDE_VBI:
+				eDVBDB.getInstance().removeFlag(service, self.FLAG_HIDE_VBI)
+			else:
+				eDVBDB.getInstance().addFlag(service, self.FLAG_HIDE_VBI)
+			eDVBDB.getInstance().reloadBouquets()
+			self.showHideVBI()
 
 class BufferIndicator(Screen):
 	def __init__(self, session):
@@ -875,6 +923,9 @@ class InfoBarSimpleEventView:
 
 class SimpleServicelist:
 	def __init__(self, services):
+		self.setServices(services)
+
+	def setServices(self, services):
 		self.services = services
 		self.length = len(services)
 		self.current = 0
@@ -1002,6 +1053,17 @@ class InfoBarEPG:
 				self.epg_bouquet = bouquet
 				epg.setServices(services)
 
+	def selectBouquet(self, bouquetref, epg):
+		services = self.getBouquetServices(bouquetref)
+		if services:
+			self.epg_bouquet = bouquetref
+			self.serviceSel.setServices(services)
+			epg.setServices(services)
+
+	def setService(self, service):
+		if service:
+			self.serviceSel.selectService(service)
+
 	def closed(self, ret=False):
 		closedScreen = self.dlg_stack.pop()
 		if self.bouquetSel and closedScreen == self.bouquetSel:
@@ -1069,7 +1131,7 @@ class InfoBarEPG:
 				self.serviceSel = SimpleServicelist(services)
 				if self.serviceSel.selectService(ref):
 					self.epg_bouquet = current_path
-					self.session.openWithCallback(self.SingleServiceEPGClosed, EPGSelection, ref, self.zapToService, serviceChangeCB=self.changeServiceCB)
+					self.session.openWithCallback(self.SingleServiceEPGClosed, EPGSelection, ref, self.zapToService, serviceChangeCB=self.changeServiceCB, parent=self)
 				else:
 					self.session.openWithCallback(self.SingleServiceEPGClosed, EPGSelection, ref)
 			else:
@@ -1097,10 +1159,10 @@ class InfoBarEPG:
 		service = self.session.nav.getCurrentService()
 		info = service and service.info()
 		ptr = info and info.getEvent(0)
-		if ptr:
+		if ptr and ptr.getEventName() != "":
 			epglist.append(ptr)
 		ptr = info and info.getEvent(1)
-		if ptr:
+		if ptr and ptr.getEventName() != "":
 			epglist.append(ptr)
 		self.epglist = epglist
 
@@ -1312,7 +1374,11 @@ class InfoBarSeek:
 
 	def showAfterSeek(self):
 		if isinstance(self, InfoBarShowHide):
-			self.doShow()
+			if isStandardInfoBar(self) and self.timeshiftEnabled():
+				for c in self.onPlayStateChanged:
+					c(self.seekstate)
+			else:
+				self.doShow()
 
 	def up(self):
 		pass
@@ -1639,10 +1705,12 @@ class TimeshiftLive(Screen):
 
 class InfoBarTimeshiftState(InfoBarPVRState):
 	def __init__(self):
-		InfoBarPVRState.__init__(self, screen=TimeshiftState, force_show = True)
+		InfoBarPVRState.__init__(self, screen=TimeshiftState, force_show=True)
 		self.timeshiftLiveScreen = self.session.instantiateDialog(TimeshiftLive)
 		self.onHide.append(self.timeshiftLiveScreen.hide)
-		self.secondInfoBarScreen and self.secondInfoBarScreen.onShow.append(self.timeshiftLiveScreen.hide)
+		if isStandardInfoBar(self):
+			self.secondInfoBarScreen and self.secondInfoBarScreen.onShow.append(self.timeshiftLiveScreen.hide)
+			self.secondInfoBarScreenSimple and self.secondInfoBarScreenSimple.onShow.append(self.timeshiftLiveScreen.hide)
 		self.timeshiftLiveScreen.hide()
 		self.__hideTimer = eTimer()
 		self.__hideTimer.callback.append(self.__hideTimeshiftState)
@@ -1650,8 +1718,11 @@ class InfoBarTimeshiftState(InfoBarPVRState):
 
 	def _mayShow(self):
 		if self.timeshiftEnabled():
-			if self.secondInfoBarScreen and self.secondInfoBarScreen.shown:
-				self.secondInfoBarScreen.hide()
+			if isStandardInfoBar(self):
+				if self.secondInfoBarScreen and self.secondInfoBarScreen.shown:
+					self.secondInfoBarScreen.hide()
+				if self.secondInfoBarScreenSimple and self.secondInfoBarScreenSimple.shown:
+					self.secondInfoBarScreenSimple.hide()
 			if self.timeshiftActivated():
 				self.pvrStateDialog.show()
 				self.timeshiftLiveScreen.hide()
@@ -2172,7 +2243,7 @@ class InfoBarPiP:
 			if self.session.pipshown:
 				lastPiPServiceTimeout = int(config.usage.pip_last_service_timeout.value)
 				if lastPiPServiceTimeout >= 0:
-					self.lastPiPService = self.session.pip.getCurrentServiceReference()
+					self.lastPiPService = self.session.pip.getCurrentService()
 					if lastPiPServiceTimeout:
 						self.lastPiPServiceTimeoutTimer.startLongTimer(lastPiPServiceTimeout)
 				del self.session.pip
@@ -2182,12 +2253,12 @@ class InfoBarPiP:
 		else:
 			self.session.pip = self.session.instantiateDialog(PictureInPicture)
 			self.session.pip.show()
-			newservice = self.lastPiPService or self.session.nav.getCurrentlyPlayingServiceReference() or (slist and slist.servicelist.getCurrent())
+			newservice = self.lastPiPService or self.session.nav.getCurrentlyPlayingServiceOrGroup() or (slist and slist.servicelist.getCurrent())
 			if self.session.pip.playService(newservice):
 				self.session.pipshown = True
 				self.session.pip.servicePath = slist and slist.getCurrentServicePath()
 			else:
-				newservice = self.session.nav.getCurrentlyPlayingServiceReference() or (slist and slist.servicelist.getCurrent())
+				newservice = self.session.nav.getCurrentlyPlayingServiceOrGroup() or (slist and slist.servicelist.getCurrent())
 				if self.session.pip.playService(newservice):
 					self.session.pipshown = True
 					self.session.pip.servicePath = slist and slist.getCurrentServicePath()
@@ -2231,7 +2302,6 @@ class InfoBarPiP:
 					self.session.pip.servicePath = currentServicePath
 					self.session.pip.servicePath[1] = currentBouquet
 				if slist and slist.dopipzap:
-					# This unfortunately won't work with subservices
 					slist.setCurrentSelection(self.session.pip.getCurrentService())
 
 	def movePiP(self):
@@ -2478,12 +2548,12 @@ class InfoBarInstantRecord:
 	def changeDuration(self, entry):
 		if entry is not None and entry >= 0:
 			self.selectedEntry = entry
-			self.session.openWithCallback(self.inputCallback, InputBox, title=_("How many minutes do you want to record?"), text="5", maxSize=False, type=Input.NUMBER)
+			self.session.openWithCallback(self.inputCallback, InputBox, title=_("How many minutes do you want to record?"), text="5  ", maxSize=True, type=Input.NUMBER)
 
 	def addRecordingTime(self, entry):
 		if entry is not None and entry >= 0:
 			self.selectedEntry = entry
-			self.session.openWithCallback(self.inputAddRecordingTime, InputBox, title=_("How many minutes do you want add to record?"), text="5", maxSize=False, type=Input.NUMBER)
+			self.session.openWithCallback(self.inputAddRecordingTime, InputBox, title=_("How many minutes do you want add to record?"), text="5  ", maxSize=True, type=Input.NUMBER)
 
 	def inputAddRecordingTime(self, value):
 		if value:
@@ -2693,7 +2763,7 @@ class InfoBarSubserviceSelection:
 				self.playSubservice(service[1])
 
 	def addSubserviceToBouquetCallback(self, service):
-		if len(service) > 1 and isinstance(service[1], eServiceReference):
+		if service and len(service) > 1 and isinstance(service[1], eServiceReference):
 			self.selectedSubservice = service
 			if self.bouquets is None:
 				cnt = 0
@@ -3201,7 +3271,7 @@ class InfoBarSubtitleSupport(object):
 	def __updatedInfo(self):
 		if not self.selected_subtitle:
 			subtitle = self.getCurrentServiceSubtitle()
-			cachedsubtitle = subtitle.getCachedSubtitle()
+			cachedsubtitle = subtitle and subtitle.getCachedSubtitle()
 			if cachedsubtitle:
 				self.enableSubtitle(cachedsubtitle)
 
@@ -3292,19 +3362,33 @@ class InfoBarPowersaver:
 		if config.usage.inactivity_timer_blocktime.value:
 			curtime = localtime(time())
 			if curtime.tm_year > 1970: #check if the current time is valid
+				duration = blocktime = extra_time = False
+				if config.usage.inactivity_timer_blocktime_by_weekdays.value:
+					weekday = curtime.tm_wday
+					if config.usage.inactivity_timer_blocktime_day[weekday].value:
+						blocktime = True
+						begintime = tuple(config.usage.inactivity_timer_blocktime_begin_day[weekday].value)
+						endtime = tuple(config.usage.inactivity_timer_blocktime_end_day[weekday].value)
+						extra_time = config.usage.inactivity_timer_blocktime_extra_day[weekday].value
+						begintime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_begin_day[weekday].value)
+						endtime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_end_day[weekday].value)
+				else:
+					blocktime = True
+					begintime = tuple(config.usage.inactivity_timer_blocktime_begin.value)
+					endtime = tuple(config.usage.inactivity_timer_blocktime_end.value)
+					extra_time = config.usage.inactivity_timer_blocktime_extra.value
+					begintime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_begin.value)
+					endtime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_end.value)
 				curtime = (curtime.tm_hour, curtime.tm_min, curtime.tm_sec)
-				begintime = tuple(config.usage.inactivity_timer_blocktime_begin.value)
-				endtime = tuple(config.usage.inactivity_timer_blocktime_end.value)
-				begintime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_begin.value)
-				endtime_extra = tuple(config.usage.inactivity_timer_blocktime_extra_end.value)
-				if begintime <= endtime and (curtime >= begintime and curtime < endtime) or begintime > endtime and (curtime >= begintime or curtime < endtime) or config.usage.inactivity_timer_blocktime_extra.value and\
-				(begintime_extra <= endtime_extra and (curtime >= begintime_extra and curtime < endtime_extra) or begintime_extra > endtime_extra and (curtime >= begintime_extra or curtime < endtime_extra)):
+				if blocktime and (begintime <= endtime and (curtime >= begintime and curtime < endtime) or begintime > endtime and (curtime >= begintime or curtime < endtime)):
 					duration = (endtime[0]*3600 + endtime[1]*60) - (curtime[0]*3600 + curtime[1]*60 + curtime[2])
-					if duration:
-						if duration < 0:
-							duration += 24*3600
-						self.inactivityTimer.startLongTimer(duration)
-						return
+				elif extra_time and (begintime_extra <= endtime_extra and (curtime >= begintime_extra and curtime < endtime_extra) or begintime_extra > endtime_extra and (curtime >= begintime_extra or curtime < endtime_extra)):
+					duration = (endtime_extra[0]*3600 + endtime_extra[1]*60) - (curtime[0]*3600 + curtime[1]*60 + curtime[2])
+				if duration:
+					if duration < 0:
+						duration += 24*3600
+					self.inactivityTimer.startLongTimer(duration)
+					return
 		if Screens.Standby.inStandby:
 			self.inactivityTimeoutCallback(True)
 		else:

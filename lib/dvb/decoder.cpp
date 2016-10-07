@@ -44,10 +44,12 @@ eDVBAudio::eDVBAudio(eDVBDemux *demux, int dev)
 		m_fd_demux = -1;
 	}
 
+#ifndef DREAMBOX
 	if (m_fd >= 0)
 	{
 		::ioctl(m_fd, AUDIO_SELECT_SOURCE, demux ? AUDIO_SOURCE_DEMUX : AUDIO_SOURCE_HDMI);
 	}
+#endif
 }
 
 int eDVBAudio::startPid(int pid, int type)
@@ -119,8 +121,12 @@ int eDVBAudio::startPid(int pid, int type)
 			bypass = 0x10;
 			break;
 		case aDDP:
-			bypass = 0x22;
-			break;
+#ifdef DREAMBOX
+		bypass = 7;
+#else
+		bypass = 0x22;
+#endif
+		break;
 		}
 
 		eDebugNoNewLineStart("[eDVBAudio%d] AUDIO_SET_BYPASS bypass=%d ", m_dev, bypass);
@@ -266,11 +272,12 @@ eDVBVideo::eDVBVideo(eDVBDemux *demux, int dev)
 		m_fd_demux = -1;
 	}
 
+#ifndef DREAMBOX
 	if (m_fd >= 0)
 	{
 		::ioctl(m_fd, VIDEO_SELECT_SOURCE, demux ? VIDEO_SOURCE_DEMUX : VIDEO_SOURCE_HDMI);
 	}
-
+#endif
 	if (m_close_invalidates_attributes < 0)
 	{
 		/*
@@ -300,6 +307,7 @@ eDVBVideo::eDVBVideo(eDVBDemux *demux, int dev)
 #define VIDEO_STREAMTYPE_VC1_SM 5
 #define VIDEO_STREAMTYPE_MPEG1 6
 #define VIDEO_STREAMTYPE_H265_HEVC 7
+#define VIDEO_STREAMTYPE_AVS 16
 
 int eDVBVideo::startPid(int pid, int type)
 {
@@ -328,6 +336,9 @@ int eDVBVideo::startPid(int pid, int type)
 			break;
 		case H265_HEVC:
 			streamtype = VIDEO_STREAMTYPE_H265_HEVC;
+			break;
+		case AVS:
+			streamtype = VIDEO_STREAMTYPE_AVS;
 			break;
 		}
 

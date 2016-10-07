@@ -311,6 +311,19 @@ eDVBUsbAdapter::eDVBUsbAdapter(int nr)
 		frontend = -1;
 		goto error;
 	}
+
+	struct dtv_properties props;
+	struct dtv_property prop[1];
+
+	prop[0].cmd = DTV_ENUM_DELSYS;
+	memset(prop[0].u.buffer.data, 0, sizeof(prop[0].u.buffer.data));
+	prop[0].u.buffer.len = 0;
+	props.num = 1;
+	props.props = prop;
+
+	if (ioctl(frontend, FE_GET_PROPERTY, &props) < 0)
+		eDebug("[eDVBUsbAdapter] FE_GET_PROPERTY DTV_ENUM_DELSYS failed %m");
+
 	::close(frontend);
 	frontend = -1;
 
@@ -373,7 +386,10 @@ eDVBUsbAdapter::eDVBUsbAdapter(int nr)
 		strcpy(type,"DVB-C");
 		break;
 	case FE_OFDM:
-		strcpy(type,"DVB-T");
+		if (fe_info.caps & FE_CAN_2G_MODULATION)
+			strcpy(type,"DVB-T2");
+		else
+			strcpy(type,"DVB-T");
 		break;
 	case FE_ATSC:
 		strcpy(type,"ATSC");
@@ -396,6 +412,8 @@ eDVBUsbAdapter::eDVBUsbAdapter(int nr)
 	ioctl(vtunerFd, VTUNER_SET_NAME, name);
 	ioctl(vtunerFd, VTUNER_SET_TYPE, type);
 	ioctl(vtunerFd, VTUNER_SET_FE_INFO, &fe_info);
+	if (prop[0].u.buffer.len > 0)
+		ioctl(vtunerFd, VTUNER_SET_DELSYS, prop[0].u.buffer.data);
 	ioctl(vtunerFd, VTUNER_SET_HAS_OUTPUTS, "no");
 	ioctl(vtunerFd, VTUNER_SET_ADAPTER, nr);
 
@@ -473,7 +491,7 @@ void *eDVBUsbAdapter::vtunerPump()
 		unsigned char pad[64]; /* nobody knows the much data the driver will try to copy into our struct, add some padding to be sure */
 	};
 
-#define DEMUX_BUFFER_SIZE (8 * ((188 / 4) * 4096)) /* 1.5MB */
+#define DEMUX_BUFFER_SIZE (16 * 1024 * 188 ) /* 3 MB */
 	ioctl(demuxFd, DMX_SET_BUFFER_SIZE, DEMUX_BUFFER_SIZE);
 
 	while (running)
@@ -736,6 +754,30 @@ bool eDVBResourceManager::frontendIsCompatible(int index, const char *type)
 		}
 	}
 	return false;
+}
+
+bool eDVBResourceManager::frontendIsMultistream(int index)
+{
+	for (eSmartPtrList<eDVBRegisteredFrontend>::iterator i(m_frontend.begin()); i != m_frontend.end(); ++i)
+	{
+		if (i->m_frontend->getSlotID() == index)
+		{
+			return i->m_frontend->is_multistream();
+		}
+	}
+	return false;
+}
+
+std::string eDVBResourceManager::getFrontendCapabilities(int index)
+{
+	for (eSmartPtrList<eDVBRegisteredFrontend>::iterator i(m_frontend.begin()); i != m_frontend.end(); ++i)
+	{
+		if (i->m_frontend->getSlotID() == index)
+		{
+			return i->m_frontend->getCapabilities();
+		}
+	}
+	return "";
 }
 
 void eDVBResourceManager::setFrontendType(int index, const char *type)
@@ -1266,6 +1308,8 @@ int tuner_type_channel_default(ePtr<iDVBChannelList> &channellist, const eDVBCha
 						return 40000;
 					case iDVBFrontend::feTerrestrial:
 						return 30000;
+					case iDVBFrontend::feATSC:
+						return 20000;
 					default:
 						break;
 				}

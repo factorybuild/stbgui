@@ -7,7 +7,9 @@
 
 #include <lib/base/eerror.h>
 
-//#define SEC_DEBUG
+#include "absdiff.h"
+
+#define SEC_DEBUG
 
 #ifdef SEC_DEBUG
 #define eSecDebug(arg...) eDebug(arg)
@@ -49,6 +51,7 @@ eDVBSatelliteEquipmentControl::eDVBSatelliteEquipmentControl(eSmartPtrList<eDVBR
 
 int eDVBSatelliteEquipmentControl::canTune(const eDVBFrontendParametersSatellite &sat, iDVBFrontend *fe, int slot_id, int *highest_score_lnb)
 {
+	const dvb_frontend_info fe_info = ((eDVBFrontend*)fe)->getFrontendInfo();
 	bool simulate = ((eDVBFrontend*)fe)->is_simulate();
 	bool direct_connected = m_not_linked_slot_mask & slot_id;
 	int score=0, satcount=0;
@@ -220,8 +223,8 @@ int eDVBSatelliteEquipmentControl::canTune(const eDVBFrontendParametersSatellite
 				{
 					int lof = sat.frequency > lnb_param.m_lof_threshold ?
 						lnb_param.m_lof_hi : lnb_param.m_lof_lo;
-					int tuner_freq = abs(sat.frequency - lof);
-					if (tuner_freq < 900000 || tuner_freq > 2200000)
+					unsigned int tuner_freq = absdiff(sat.frequency, lof);
+					if (tuner_freq < fe_info.frequency_min || tuner_freq > fe_info.frequency_max)
 						ret = 0;
 				}
 
@@ -391,8 +394,7 @@ RESULT eDVBSatelliteEquipmentControl::prepare(iDVBFrontend &frontend, const eDVB
 			if(!is_unicable)
 			{
 				// calc Frequency
-				int local= abs(sat.frequency
-					- lof);
+				int local = absdiff(sat.frequency, lof);
 				frequency = ((((local * 2) / 125) + 1) / 2) * 125;
 				frontend.setData(eDVBFrontend::FREQ_OFFSET, sat.frequency - frequency);
 
@@ -416,8 +418,7 @@ RESULT eDVBSatelliteEquipmentControl::prepare(iDVBFrontend &frontend, const eDVB
 			}
 			else
 			{
-				int tmp1 = abs(sat.frequency
-						-lof)
+				int tmp1 = absdiff(sat.frequency, lof)
 						+ lnb_param.SatCRvco
 						- 1400000
 						+ lnb_param.guard_offset;
@@ -956,7 +957,9 @@ RESULT eDVBSatelliteEquipmentControl::prepare(iDVBFrontend &frontend, const eDVB
 			eDVBFrontendParametersSatellite::Polarisation_CircularLeft ? "CL" : "CR",
 		sat.modulation == eDVBFrontendParametersSatellite::Modulation_Auto ? "AUTO" :
 			eDVBFrontendParametersSatellite::Modulation_QPSK ? "QPSK" :
-			eDVBFrontendParametersSatellite::Modulation_8PSK ? "8PSK" : "QAM16",
+			eDVBFrontendParametersSatellite::Modulation_8PSK ? "8PSK" :
+			eDVBFrontendParametersSatellite::Modulation_QAM16 ? "QAM16" :
+			eDVBFrontendParametersSatellite::Modulation_16APSK ? "16APSK" : "32APSK",
 		sat.orbital_position );
 	return -1;
 }

@@ -334,51 +334,42 @@ class PowerKey:
 
 	def __init__(self, session):
 		self.session = session
-		globalActionMap.actions["power_down"]=self.powerdown
-		globalActionMap.actions["power_up"]=self.powerup
-		globalActionMap.actions["power_long"]=self.powerlong
-		globalActionMap.actions["deepstandby"]=self.shutdown # frontpanel long power button press
-		globalActionMap.actions["discrete_off"]=self.standby
-		self.standbyblocked = 1
-
-	def MenuClosed(self, *val):
-		self.session.infobar = None
+		globalActionMap.actions["power_down"] = lambda *args: None
+		globalActionMap.actions["power_up"] = self.powerup
+		globalActionMap.actions["power_long"] = self.powerlong
+		globalActionMap.actions["deepstandby"] = self.shutdown # frontpanel long power button press
+		globalActionMap.actions["discrete_off"] = self.standby
 
 	def shutdown(self):
 		print "PowerOff - Now!"
 		if not Screens.Standby.inTryQuitMainloop and self.session.current_dialog and self.session.current_dialog.ALLOW_SUSPEND:
 			self.session.open(Screens.Standby.TryQuitMainloop, 1)
 
-	def powerlong(self):
-		if Screens.Standby.inTryQuitMainloop or (self.session.current_dialog and not self.session.current_dialog.ALLOW_SUSPEND):
-			return
-		self.doAction(action = config.usage.on_long_powerpress.value)
-
-	def doAction(self, action):
-		self.standbyblocked = 1
-		if action == "shutdown":
-			self.shutdown()
-		elif action == "show_menu":
-			print "Show shutdown Menu"
-			root = mdom.getroot()
-			for x in root.findall("menu"):
-				y = x.find("id")
-				if y is not None:
-					id = y.get("val")
-					if id and id == "shutdown":
-						self.session.infobar = self
-						menu_screen = self.session.openWithCallback(self.MenuClosed, MainMenu, x)
-						menu_screen.setTitle(_("Standby / restart"))
-						return
-		elif action == "standby":
-			self.standby()
-
-	def powerdown(self):
-		self.standbyblocked = 0
-
 	def powerup(self):
-		if self.standbyblocked == 0:
-			self.doAction(action = config.usage.on_short_powerpress.value)
+		self.doAction(config.misc.hotkey.power.value)
+
+	def powerlong(self):
+		if not(Screens.Standby.inTryQuitMainloop or (self.session.current_dialog and not self.session.current_dialog.ALLOW_SUSPEND)):
+			self.doAction(config.misc.hotkey.power_long.value)
+
+	def doAction(self, selected):
+		if selected:
+			selected = selected.split("/")
+			if selected[0] == "Module":
+				try:
+					exec "from " + selected[1] + " import *"
+					exec "self.session.open(" + ",".join(selected[2:]) + ")"
+				except:
+					print "[mytest] error during executing module %s, screen %s" % (selected[1], selected[2])
+			elif selected[0] == "Menu":
+				from Screens.Menu import MainMenu, mdom
+				root = mdom.getroot()
+				for x in root.findall("menu"):
+					y = x.find("id")
+					if y is not None:
+						id = y.get("val")
+						if id and id == selected[1]:
+							self.session.open(MainMenu, x)
 
 	def standby(self):
 		if not Screens.Standby.inStandby and self.session.current_dialog and self.session.current_dialog.ALLOW_SUSPEND and self.session.in_exec:
