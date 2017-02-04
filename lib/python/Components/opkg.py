@@ -1,10 +1,14 @@
 import os
+from boxbranding import getImageVersion
 
 def enumFeeds():
 	for fn in os.listdir('/etc/opkg'):
 		if fn.endswith('-feed.conf'):
+			file = open(os.path.join('/etc/opkg', fn))
+			feedfile = file.readlines()
+			file.close()
 			try:
-				for feed in open(os.path.join('/etc/opkg', fn)):
+				for feed in feedfile:
 					yield feed.split()[1]
 			except IndexError:
 				pass
@@ -12,16 +16,16 @@ def enumFeeds():
 				pass
 
 def enumPlugins(filter_start=''):
+	list_dir = listsDirPath()
 	for feed in enumFeeds():
 		package = None
 		try:
-			file = open('/var/lib/opkg/%s' % feed, 'r')
-			for line in file:
+			for line in open(os.path.join(list_dir, feed), 'r'):
 				if line.startswith('Package:'):
 					package = line.split(":",1)[1].strip()
 					version = ''
 					description = ''
-					if package.startswith(filter_start) and not package.endswith('-dev') and not package.endswith('-staticdev') and not package.endswith('-dbg') and not package.endswith('-doc') and not package.endswith('-src') and not package.endswith('-po'):
+					if package.startswith(filter_start) and not package.endswith('-dev') and not package.endswith('-staticdev') and not package.endswith('-dbg') and not package.endswith('-doc') and not package.endswith('-src'):
 						continue
 					package = None
 				if package is None:
@@ -44,6 +48,19 @@ def enumPlugins(filter_start=''):
 					package = None
 		except IOError:
 			pass
+
+def listsDirPath():
+	try:
+		for line in open('/etc/opkg/opkg.conf', "r"):
+			if line.startswith('option'):
+				line = line.split(' ', 2)
+				if len(line) > 2 and line[1] == ('lists_dir'):
+					return line[2].strip()
+			elif line.startswith('lists_dir'):
+				return line.replace('\n','').split(' ')[2]
+	except Exception, ex:
+		print "[opkg]", ex
+	return '/var/lib/opkg/lists'
 
 if __name__ == '__main__':
 	for p in enumPlugins('enigma'):
